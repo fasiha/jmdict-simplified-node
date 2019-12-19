@@ -12,12 +12,10 @@ export async function setupFromScratch(DBNAME: string, filename: string, verbose
   const raw: Simplified = JSON.parse(await pfs.readFile(filename, 'utf8'));
   const db = LevelUp(LevelDOWN(DBNAME));
 
-  let numWordsWritten = 0;
   const maxBatches = 10000;
   let batch: AbstractBatch[] = [];
 
-  for (const w of raw.words) {
-    numWordsWritten++;
+  for (const [numWordsWritten, w] of raw.words.entries()) {
     if (batch.length > maxBatches) {
       await db.batch(batch);
       batch = [];
@@ -56,14 +54,12 @@ export async function indexesToWords(db: Db, idxs: string[]) {
 
 export async function readingPrefix(db: Db, prefix: string) {
   const gte = `indexes/kana/${prefix}`;
-  return indexesToWords(
-      db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', keyAsBuffer: false, valueAsBuffer: false})));
+  return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
 
 export async function readingAnywhere(db: Db, prefix: string) {
   const gte = `indexes/partial-kana/${prefix}`;
-  return indexesToWords(
-      db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', keyAsBuffer: false, valueAsBuffer: false})));
+  return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
 
 function allSubstrings(s: string) {
