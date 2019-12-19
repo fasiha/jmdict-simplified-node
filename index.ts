@@ -6,28 +6,33 @@ import LevelUp from 'levelup';
 import {Simplified, Word} from './interfaces';
 
 type Db = ReturnType<typeof LevelUp>;
+
+// Takes <60 seconds on 2015-era MacBook Pro, producing 125 MB Leveldb directory.
 export async function setupFromScratch(DBNAME: string, filename: string, verbose = false): Promise<Db> {
   const raw: Simplified = JSON.parse(await pfs.readFile(filename, 'utf8'));
   const db = LevelUp(LevelDOWN(DBNAME));
 
-  let nwritten = 0;
-  let batchesWritten = 0;
-  const maxNwritten = 1000;
+  let numWordsWritten = 0;
+  const maxBatches = 10000;
   let batch: AbstractBatch[] = [];
 
   for (const w of raw.words) {
-    nwritten++;
-    if (nwritten > maxNwritten) {
+    numWordsWritten++;
+    if (batch.length > maxBatches) {
       await db.batch(batch);
       batch = [];
-      nwritten = 0;
-      if (verbose) {
-        batchesWritten++;
-        console.log(`Batch # ${batchesWritten} written`);
-      }
+      if (verbose) { console.log(`${numWordsWritten} entries written`); }
     }
     batch.push({type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w)});
-    for (const k of w.kana) { batch.push({type: 'put', key: `indexes/kana/${k.text}`, value: w.id}); }
+    for (const key of (['kana', 'kanji'] as const )) {
+      for (const k of w[key]) {
+        batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
+        for (const substr of allSubstrings(k.text)) {
+          // collisions in key ok, since value will be ame
+          batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
+        }
+      }
+    }
   }
   if (batch.length) { await db.batch(batch); }
   return db;
@@ -45,12 +50,29 @@ function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
 
 async function getAllKeys(db: Db) { return drainStream<string>(db.createKeyStream({keyAsBuffer: false})); }
 
+export async function indexesToWords(db: Db, idxs: string[]) {
+  return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
+}
+
 export async function readingPrefix(db: Db, prefix: string) {
   const gte = `indexes/kana/${prefix}`;
-  const idxs: string[] =
-      await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', keyAsBuffer: false, valueAsBuffer: false}));
-  const vals: Word[] = await Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false})));
-  return vals;
+  return indexesToWords(
+      db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', keyAsBuffer: false, valueAsBuffer: false})));
+}
+
+export async function readingAnywhere(db: Db, prefix: string) {
+  const gte = `indexes/partial-kana/${prefix}`;
+  return indexesToWords(
+      db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', keyAsBuffer: false, valueAsBuffer: false})));
+}
+
+function allSubstrings(s: string) {
+  const slen = s.length;
+  let ret: Set<string> = new Set();
+  for (let start = 0; start < slen; start++) {
+    for (let length = 1; length <= slen - start; length++) { ret.add(s.substr(start, length)); }
+  }
+  return ret;
 }
 
 if (module === require.main) {
@@ -64,10 +86,14 @@ if (module === require.main) {
     } else {
       db = LevelUp(LevelDOWN(DBNAME));
     }
-    if (false) {
-      const keys = await getAllKeys(db);
-      console.log(keys)
-    }
-    console.log(await readingPrefix(db, 'それ'));
+
+    const res = await readingPrefix(db, 'いい'); // それ
+    console.dir(res, {depth: null, maxArrayLength: 1e3});
+
+    const resPartial = await readingAnywhere(db, 'いい');
+    console.dir(resPartial, {depth: null, maxArrayLength: 1e3});
+
+    console.log(`${res.length} exact found`);
+    console.log(`${resPartial.length} partial found`);
   })();
 }
