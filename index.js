@@ -15,7 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = require("fs");
 const leveldown_1 = __importDefault(require("leveldown"));
 const levelup_1 = __importDefault(require("levelup"));
-function setup(DBNAME, filename, verbose = false) {
+function setup(DBNAME, filename = '', verbose = false) {
     return __awaiter(this, void 0, void 0, function* () {
         const db = levelup_1.default(leveldown_1.default(DBNAME));
         try {
@@ -25,6 +25,9 @@ function setup(DBNAME, filename, verbose = false) {
         }
         catch (_a) {
             // pass
+        }
+        if (!filename) {
+            throw new Error('database not found but cannot create it if no `filename` given');
         }
         const raw = JSON.parse(yield fs_1.promises.readFile(filename, 'utf8'));
         const maxBatches = 10000;

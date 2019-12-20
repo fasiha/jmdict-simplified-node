@@ -13,7 +13,7 @@ export type SetupType = {
   dictDate: string,
   version: string,
 };
-export async function setup(DBNAME: string, filename: string, verbose = false): Promise<SetupType> {
+export async function setup(DBNAME: string, filename = '', verbose = false): Promise<SetupType> {
   const db = LevelUp(LevelDOWN(DBNAME));
   try {
     const opt = {asBuffer: false};
@@ -24,6 +24,7 @@ export async function setup(DBNAME: string, filename: string, verbose = false): 
     // pass
   }
 
+  if (!filename) { throw new Error('database not found but cannot create it if no `filename` given'); }
   const raw: Simplified = JSON.parse(await pfs.readFile(filename, 'utf8'));
   const maxBatches = 10000;
   let batch: AbstractBatch[] = [];
