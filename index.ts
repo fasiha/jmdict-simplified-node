@@ -3,7 +3,7 @@ import {promises as pfs} from 'fs';
 import LevelDOWN from 'leveldown';
 import LevelUp from 'levelup';
 
-import {Simplified, Word} from './interfaces';
+import {Simplified} from './interfaces';
 
 type Db = ReturnType<typeof LevelUp>;
 
@@ -46,21 +46,22 @@ function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
   })
 }
 
-async function getAllKeys(db: Db) { return drainStream<string>(db.createKeyStream({keyAsBuffer: false})); }
-
-export async function indexesToWords(db: Db, idxs: string[]) {
+async function indexesToWords(db: Db, idxs: string[]) {
   return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
 }
 
-export async function readingPrefix(db: Db, prefix: string) {
-  const gte = `indexes/kana/${prefix}`;
+async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana') {
+  const gte = `indexes/${key}/${prefix}`;
   return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
-
-export async function readingAnywhere(db: Db, prefix: string) {
-  const gte = `indexes/partial-kana/${prefix}`;
+async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana') {
+  const gte = `indexes/partial-${key}/${text}`;
   return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
+export async function readingBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kana'); }
+export async function readingAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kana'); }
+export async function kanjiBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kanji'); }
+export async function kanjiAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kanji'); }
 
 function allSubstrings(s: string) {
   const slen = s.length;
@@ -83,7 +84,7 @@ if (module === require.main) {
       db = LevelUp(LevelDOWN(DBNAME));
     }
 
-    const res = await readingPrefix(db, 'いい'); // それ
+    const res = await readingBeginning(db, 'いい'); // それ
     console.dir(res, {depth: null, maxArrayLength: 1e3});
 
     const resPartial = await readingAnywhere(db, 'いい');
