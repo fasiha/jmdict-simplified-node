@@ -3,7 +3,7 @@ import {promises as pfs} from 'fs';
 import LevelDOWN from 'leveldown';
 import LevelUp from 'levelup';
 
-import {Simplified} from './interfaces';
+import {Simplified, Word} from './interfaces';
 export * from './interfaces';
 type Db = ReturnType<typeof LevelUp>;
 
@@ -65,18 +65,18 @@ function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
   })
 }
 
-async function indexesToWords(db: Db, idxs: string[]) {
-  return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
-}
-
-async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana') {
+async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
   const gte = `indexes/${key}/${prefix}`;
   return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
-async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana') {
+async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
   const gte = `indexes/partial-${key}/${text}`;
   return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
+function indexesToWords(db: Db, idxs: string[]): Promise<Word[]> {
+  return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
+}
+
 export async function readingBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kana'); }
 export async function readingAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kana'); }
 export async function kanjiBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kanji'); }

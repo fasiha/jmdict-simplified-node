@@ -73,11 +73,6 @@ function drainStream(stream) {
             .on('end', () => resolve(ret));
     });
 }
-function indexesToWords(db, idxs) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
-    });
-}
 function searchBeginning(db, prefix, key = 'kana') {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `indexes/${key}/${prefix}`;
@@ -89,6 +84,9 @@ function searchAnywhere(db, text, key = 'kana') {
         const gte = `indexes/partial-${key}/${text}`;
         return indexesToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
     });
+}
+function indexesToWords(db, idxs) {
+    return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
 }
 function readingBeginning(db, prefix) {
     return __awaiter(this, void 0, void 0, function* () { return searchBeginning(db, prefix, 'kana'); });
