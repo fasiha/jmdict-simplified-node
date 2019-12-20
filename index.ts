@@ -8,12 +8,30 @@ export * from './interfaces';
 type Db = ReturnType<typeof LevelUp>;
 
 // Takes <60 seconds on 2015-era MacBook Pro, producing 125 MB Leveldb directory.
-export async function setupFromScratch(DBNAME: string, filename: string, verbose = false): Promise<Db> {
-  const raw: Simplified = JSON.parse(await pfs.readFile(filename, 'utf8'));
+export type SetupType = {
+  db: Db,
+  dictDate: string,
+  version: string,
+};
+export async function setup(DBNAME: string, filename: string, verbose = false): Promise<SetupType> {
   const db = LevelUp(LevelDOWN(DBNAME));
+  try {
+    const opt = {asBuffer: false};
+    const [dictDate, version] =
+        await Promise.all([db.get('raw/dictDate', opt), db.get('raw/version', opt)]) as string[];
+    return {db, dictDate, version};
+  } catch {
+    // pass
+  }
 
+  const raw: Simplified = JSON.parse(await pfs.readFile(filename, 'utf8'));
   const maxBatches = 10000;
   let batch: AbstractBatch[] = [];
+
+  {
+    const keys: (keyof Simplified)[] = ['dictDate', 'version'];
+    for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: raw[key]}) }
+  }
 
   for (const [numWordsWritten, w] of raw.words.entries()) {
     if (batch.length > maxBatches) {
@@ -33,7 +51,7 @@ export async function setupFromScratch(DBNAME: string, filename: string, verbose
     }
   }
   if (batch.length) { await db.batch(batch); }
-  return db;
+  return {db, dictDate: raw.dictDate, version: raw.version};
 }
 
 function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
@@ -75,14 +93,10 @@ function allSubstrings(s: string) {
 if (module === require.main) {
   (async function() {
     // Download jmdict-eng-3.0.1.json
-    const init = false;
     const DBNAME = 'test';
-    let db: Db;
-    if (init) {
-      db = await setupFromScratch(DBNAME, 'jmdict-eng-3.0.1.json', true);
-    } else {
-      db = LevelUp(LevelDOWN(DBNAME));
-    }
+    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.0.1.json', true);
+
+    console.log({dictDate, version});
 
     const res = await readingBeginning(db, 'いい'); // それ
     console.dir(res, {depth: null, maxArrayLength: 1e3});

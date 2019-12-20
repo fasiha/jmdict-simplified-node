@@ -15,13 +15,26 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = require("fs");
 const leveldown_1 = __importDefault(require("leveldown"));
 const levelup_1 = __importDefault(require("levelup"));
-// Takes <60 seconds on 2015-era MacBook Pro, producing 125 MB Leveldb directory.
-function setupFromScratch(DBNAME, filename, verbose = false) {
+function setup(DBNAME, filename, verbose = false) {
     return __awaiter(this, void 0, void 0, function* () {
-        const raw = JSON.parse(yield fs_1.promises.readFile(filename, 'utf8'));
         const db = levelup_1.default(leveldown_1.default(DBNAME));
+        try {
+            const opt = { asBuffer: false };
+            const [dictDate, version] = yield Promise.all([db.get('raw/dictDate', opt), db.get('raw/version', opt)]);
+            return { db, dictDate, version };
+        }
+        catch (_a) {
+            // pass
+        }
+        const raw = JSON.parse(yield fs_1.promises.readFile(filename, 'utf8'));
         const maxBatches = 10000;
         let batch = [];
+        {
+            const keys = ['dictDate', 'version'];
+            for (const key of keys) {
+                batch.push({ type: 'put', key: `raw/${key}`, value: raw[key] });
+            }
+        }
         for (const [numWordsWritten, w] of raw.words.entries()) {
             if (batch.length > maxBatches) {
                 yield db.batch(batch);
@@ -44,10 +57,10 @@ function setupFromScratch(DBNAME, filename, verbose = false) {
         if (batch.length) {
             yield db.batch(batch);
         }
-        return db;
+        return { db, dictDate: raw.dictDate, version: raw.version };
     });
 }
-exports.setupFromScratch = setupFromScratch;
+exports.setup = setup;
 function drainStream(stream) {
     const ret = [];
     return new Promise((resolve, reject) => {
@@ -104,15 +117,9 @@ if (module === require.main) {
     (function () {
         return __awaiter(this, void 0, void 0, function* () {
             // Download jmdict-eng-3.0.1.json
-            const init = false;
             const DBNAME = 'test';
-            let db;
-            if (init) {
-                db = yield setupFromScratch(DBNAME, 'jmdict-eng-3.0.1.json', true);
-            }
-            else {
-                db = levelup_1.default(leveldown_1.default(DBNAME));
-            }
+            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.0.1.json', true);
+            console.log({ dictDate, version });
             const res = yield readingBeginning(db, 'いい'); // それ
             console.dir(res, { depth: null, maxArrayLength: 1e3 });
             const resPartial = yield readingAnywhere(db, 'いい');
