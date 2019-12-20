@@ -4,7 +4,7 @@ import LevelDOWN from 'leveldown';
 import LevelUp from 'levelup';
 
 import {Simplified} from './interfaces';
-
+export * from './interfaces';
 type Db = ReturnType<typeof LevelUp>;
 
 // Takes <60 seconds on 2015-era MacBook Pro, producing 125 MB Leveldb directory.
