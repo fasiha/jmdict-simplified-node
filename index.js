@@ -115,7 +115,8 @@ exports.kanjiAnywhere = kanjiAnywhere;
 function getField(db, key) {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `raw/${key}`;
-        return drainStream(db.createValueStream({ gte, lte: gte, valueAsBuffer: false }));
+        const ret = yield drainStream(db.createValueStream({ gte, lte: gte, valueAsBuffer: false }));
+        return ret[0];
     });
 }
 exports.getField = getField;

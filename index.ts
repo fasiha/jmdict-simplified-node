@@ -89,9 +89,10 @@ export async function kanjiBeginning(db: Db, prefix: string) { return searchBegi
 export async function kanjiAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kanji'); }
 
 type BetterOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
-export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>) {
+export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string> {
   const gte = `raw/${key}`;
-  return drainStream(db.createValueStream({gte, lte: gte, valueAsBuffer: false}));
+  const ret = await drainStream<string>(db.createValueStream({gte, lte: gte, valueAsBuffer: false}));
+  return ret[0];
 }
 
 function allSubstrings(s: string) {
