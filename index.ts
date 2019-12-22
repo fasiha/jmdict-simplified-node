@@ -30,8 +30,14 @@ export async function setup(DBNAME: string, filename = '', verbose = false): Pro
   let batch: AbstractBatch[] = [];
 
   {
+    // non-JSON, pure strings
     const keys: (keyof Simplified)[] = ['dictDate', 'version'];
     for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: raw[key]}) }
+  }
+  {
+    // to JSONify
+    const keys: (keyof Simplified)[] = ['tags', 'dictRevisions'];
+    for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key])}) }
   }
 
   for (const [numWordsWritten, w] of raw.words.entries()) {
@@ -81,6 +87,12 @@ export async function readingBeginning(db: Db, prefix: string) { return searchBe
 export async function readingAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kana'); }
 export async function kanjiBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kanji'); }
 export async function kanjiAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kanji'); }
+
+type BetterOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
+export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>) {
+  const gte = `raw/${key}`;
+  return drainStream(db.createValueStream({gte, lte: gte, valueAsBuffer: false}));
+}
 
 function allSubstrings(s: string) {
   const slen = s.length;

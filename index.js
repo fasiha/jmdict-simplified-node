@@ -33,9 +33,17 @@ function setup(DBNAME, filename = '', verbose = false) {
         const maxBatches = 10000;
         let batch = [];
         {
+            // non-JSON, pure strings
             const keys = ['dictDate', 'version'];
             for (const key of keys) {
                 batch.push({ type: 'put', key: `raw/${key}`, value: raw[key] });
+            }
+        }
+        {
+            // to JSONify
+            const keys = ['tags', 'dictRevisions'];
+            for (const key of keys) {
+                batch.push({ type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key]) });
             }
         }
         for (const [numWordsWritten, w] of raw.words.entries()) {
@@ -104,6 +112,13 @@ function kanjiAnywhere(db, text) {
     return __awaiter(this, void 0, void 0, function* () { return searchAnywhere(db, text, 'kanji'); });
 }
 exports.kanjiAnywhere = kanjiAnywhere;
+function getField(db, key) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const gte = `raw/${key}`;
+        return drainStream(db.createValueStream({ gte, lte: gte, valueAsBuffer: false }));
+    });
+}
+exports.getField = getField;
 function allSubstrings(s) {
     const slen = s.length;
     let ret = new Set();
