@@ -51,7 +51,7 @@ export async function setup(DBNAME: string, filename = '', verbose = false): Pro
       for (const k of w[key]) {
         batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
         for (const substr of allSubstrings(k.text)) {
-          // collisions in key ok, since value will be ame
+          // collisions in key ok, since value will be same
           batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
         }
       }
@@ -73,13 +73,13 @@ function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
 
 async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
   const gte = `indexes/${key}/${prefix}`;
-  return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
+  return idsToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
 async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
   const gte = `indexes/partial-${key}/${text}`;
-  return indexesToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
+  return idsToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
 }
-function indexesToWords(db: Db, idxs: string[]): Promise<Word[]> {
+export function idsToWords(db: Db, idxs: string[]): Promise<Word[]> {
   return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
 }
 
@@ -120,5 +120,7 @@ if (module === require.main) {
 
     console.log(`${res.length} exact found`);
     console.log(`${resPartial.length} partial found`);
+
+    console.log(await idsToWords(db, ['1383480']));
   })();
 }

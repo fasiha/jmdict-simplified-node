@@ -59,7 +59,7 @@ function setup(DBNAME, filename = '', verbose = false) {
                 for (const k of w[key]) {
                     batch.push({ type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id });
                     for (const substr of allSubstrings(k.text)) {
-                        // collisions in key ok, since value will be ame
+                        // collisions in key ok, since value will be same
                         batch.push({ type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id });
                     }
                 }
@@ -84,18 +84,19 @@ function drainStream(stream) {
 function searchBeginning(db, prefix, key = 'kana') {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `indexes/${key}/${prefix}`;
-        return indexesToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
+        return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
     });
 }
 function searchAnywhere(db, text, key = 'kana') {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `indexes/partial-${key}/${text}`;
-        return indexesToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
+        return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
     });
 }
-function indexesToWords(db, idxs) {
+function idsToWords(db, idxs) {
     return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
 }
+exports.idsToWords = idsToWords;
 function readingBeginning(db, prefix) {
     return __awaiter(this, void 0, void 0, function* () { return searchBeginning(db, prefix, 'kana'); });
 }
@@ -143,6 +144,7 @@ if (module === require.main) {
             console.dir(resPartial, { depth: null, maxArrayLength: 1e3 });
             console.log(`${res.length} exact found`);
             console.log(`${resPartial.length} partial found`);
+            console.log(yield idsToWords(db, ['1383480']));
         });
     })();
 }
