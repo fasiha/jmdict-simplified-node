@@ -81,36 +81,44 @@ function drainStream(stream) {
             .on('end', () => resolve(ret));
     });
 }
-function searchBeginning(db, prefix, key = 'kana') {
+function searchBeginning(db, prefix, key = 'kana', limit) {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `indexes/${key}/${prefix}`;
-        return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
+        return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit })));
     });
 }
-function searchAnywhere(db, text, key = 'kana') {
+function searchAnywhere(db, text, key = 'kana', limit) {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `indexes/partial-${key}/${text}`;
-        return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false })));
+        return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit })));
     });
 }
 function idsToWords(db, idxs) {
     return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
 }
 exports.idsToWords = idsToWords;
-function readingBeginning(db, prefix) {
-    return __awaiter(this, void 0, void 0, function* () { return searchBeginning(db, prefix, 'kana'); });
+function readingBeginning(db, prefix, limit = -1) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return searchBeginning(db, prefix, 'kana', limit);
+    });
 }
 exports.readingBeginning = readingBeginning;
-function readingAnywhere(db, text) {
-    return __awaiter(this, void 0, void 0, function* () { return searchAnywhere(db, text, 'kana'); });
+function readingAnywhere(db, text, limit = -1) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return searchAnywhere(db, text, 'kana', limit);
+    });
 }
 exports.readingAnywhere = readingAnywhere;
-function kanjiBeginning(db, prefix) {
-    return __awaiter(this, void 0, void 0, function* () { return searchBeginning(db, prefix, 'kanji'); });
+function kanjiBeginning(db, prefix, limit = -1) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return searchBeginning(db, prefix, 'kanji', limit);
+    });
 }
 exports.kanjiBeginning = kanjiBeginning;
-function kanjiAnywhere(db, text) {
-    return __awaiter(this, void 0, void 0, function* () { return searchAnywhere(db, text, 'kanji'); });
+function kanjiAnywhere(db, text, limit = -1) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return searchAnywhere(db, text, 'kanji', limit);
+    });
 }
 exports.kanjiAnywhere = kanjiAnywhere;
 function getField(db, key) {
@@ -139,12 +147,15 @@ if (module === require.main) {
             const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.0.1.json', true);
             console.log({ dictDate, version });
             const res = yield readingBeginning(db, 'いい'); // それ
-            console.dir(res, { depth: null, maxArrayLength: 1e3 });
             const resPartial = yield readingAnywhere(db, 'いい');
-            console.dir(resPartial, { depth: null, maxArrayLength: 1e3 });
             console.log(`${res.length} exact found`);
             console.log(`${resPartial.length} partial found`);
             console.log(yield idsToWords(db, ['1383480']));
+            {
+                const LIMIT = 4;
+                const res = yield readingBeginning(db, 'いい', LIMIT);
+                console.log(`${res.length} found with limit ${LIMIT}`);
+            }
         });
     })();
 }

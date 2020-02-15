@@ -71,22 +71,32 @@ function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
   })
 }
 
-async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
+async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana', limit: number): Promise<Word[]> {
   const gte = `indexes/${key}/${prefix}`;
-  return idsToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
+  return idsToWords(db,
+                    await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit})));
 }
-async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
+async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana', limit: number): Promise<Word[]> {
   const gte = `indexes/partial-${key}/${text}`;
-  return idsToWords(db, await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false})));
+  return idsToWords(db,
+                    await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit})));
 }
 export function idsToWords(db: Db, idxs: string[]): Promise<Word[]> {
   return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
 }
 
-export async function readingBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kana'); }
-export async function readingAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kana'); }
-export async function kanjiBeginning(db: Db, prefix: string) { return searchBeginning(db, prefix, 'kanji'); }
-export async function kanjiAnywhere(db: Db, text: string) { return searchAnywhere(db, text, 'kanji'); }
+export async function readingBeginning(db: Db, prefix: string, limit = -1) {
+  return searchBeginning(db, prefix, 'kana', limit);
+}
+export async function readingAnywhere(db: Db, text: string, limit = -1) {
+  return searchAnywhere(db, text, 'kana', limit);
+}
+export async function kanjiBeginning(db: Db, prefix: string, limit = -1) {
+  return searchBeginning(db, prefix, 'kanji', limit);
+}
+export async function kanjiAnywhere(db: Db, text: string, limit = -1) {
+  return searchAnywhere(db, text, 'kanji', limit);
+}
 
 type BetterOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string> {
@@ -113,14 +123,16 @@ if (module === require.main) {
     console.log({dictDate, version});
 
     const res = await readingBeginning(db, 'いい'); // それ
-    console.dir(res, {depth: null, maxArrayLength: 1e3});
-
     const resPartial = await readingAnywhere(db, 'いい');
-    console.dir(resPartial, {depth: null, maxArrayLength: 1e3});
-
     console.log(`${res.length} exact found`);
     console.log(`${resPartial.length} partial found`);
 
     console.log(await idsToWords(db, ['1383480']));
+
+    {
+      const LIMIT = 4;
+      const res = await readingBeginning(db, 'いい', LIMIT);
+      console.log(`${res.length} found with limit ${LIMIT}`);
+    }
   })();
 }
