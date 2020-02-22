@@ -121,6 +121,12 @@ function kanjiAnywhere(db, text, limit = -1) {
     });
 }
 exports.kanjiAnywhere = kanjiAnywhere;
+function getTags(db) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return db.get('raw/tags', { asBuffer: false }).then(x => JSON.parse(x));
+    });
+}
+exports.getTags = getTags;
 function getField(db, key) {
     return __awaiter(this, void 0, void 0, function* () {
         const gte = `raw/${key}`;
@@ -155,6 +161,9 @@ if (module === require.main) {
                 const LIMIT = 4;
                 const res = yield readingBeginning(db, 'いい', LIMIT);
                 console.log(`${res.length} found with limit ${LIMIT}`);
+            }
+            {
+                console.log(Object.keys(yield getTags(db)));
             }
         });
     })();

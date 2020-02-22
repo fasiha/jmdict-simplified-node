@@ -98,6 +98,10 @@ export async function kanjiAnywhere(db: Db, text: string, limit = -1) {
   return searchAnywhere(db, text, 'kanji', limit);
 }
 
+export async function getTags(db: Db): Promise<Simplified['tags']> {
+  return db.get('raw/tags', {asBuffer: false}).then(x => JSON.parse(x));
+}
+
 type BetterOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string> {
   const gte = `raw/${key}`;
@@ -134,5 +138,6 @@ if (module === require.main) {
       const res = await readingBeginning(db, 'いい', LIMIT);
       console.log(`${res.length} found with limit ${LIMIT}`);
     }
+    { console.log(Object.keys(await getTags(db))); }
   })();
 }
