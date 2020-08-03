@@ -69,7 +69,7 @@ These acronyms will be found in the hits yielded by the four lookup functions ab
 
 This function will return an object mapping these abbreviations to their full meaning.
 
-### getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string>
+### `getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string>`
 There are a small handful of extra pieces of information that the original JSON includes, things like
 - `dictDate`, the date the original JMDict XML file was created,
 - `dictRevisions`, a list of revisions in the original JMDict XML file, etc.
