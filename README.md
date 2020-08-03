@@ -4,6 +4,8 @@
 
 *This* current project, `jmdict-simplified-node` (the one you're reading about), helps Node.js applications load JMDict-Simplified's JSON into a LevelDB database to facilitate fast searches for both text (which often contain kanji) and readings (no kanji), on both prefixes and full-text. It does this by simply creating indexes on all substrings of all text and readings.
 
+This means that after a one-time setup, your apps can start instantly and search this dictionary with lightning speed (all thanks to LevelDB of course). Note that you don't need to know or care anything about LevelDB to use this library—it handles all the details for you.
+
 This project also contains TypeScript interfaces describing the JMDict-Simplified project, allowing your TypeScript projects to effortlessly navigate this data.
 
 ## Installation and setup
@@ -46,7 +48,8 @@ Find all readings starting with a given `prefix`. Needs a `Db`-typed object, whi
 Returns a promisified array of `Word`s. A `Word` is an entry in JMDict, and contains things like
 - an `id` to uniquely identify it in the dictionary,
 - `kanji`, or the text being defined (might or might not actually include something you can call kanji: `ＣＤ` and `日本` are two examples),
-- `kana`, the reading (that is, the pronunciation) of this kanji text, etc.
+- `kana`, the reading (that is, the pronunciation) of this kanji text,
+- `sense`, i.e., the various dictionary senses this word can have.
 
 Look at [`interfaces.ts`](./interfaces.ts) for the details. It very carefully follows the soft-schema of the [upstream `jmdict-simplified`](https://github.com/scriptin/jmdict-simplified) project.
 
