@@ -7,14 +7,14 @@ import {Simplified, Word} from './interfaces';
 export * from './interfaces';
 type Db = ReturnType<typeof LevelUp>;
 
-// Takes <60 seconds on 2015-era MacBook Pro, producing 125 MB Leveldb directory.
+// Takes ~90 seconds on 2015-era MacBook Pro, producing 140 MB Leveldb directory ("jmdict-eng-3.1.0.json").
 export type SetupType = {
   db: Db,
   dictDate: string,
   version: string,
 };
-export async function setup(DBNAME: string, filename = '', verbose = false): Promise<SetupType> {
-  const db = LevelUp(LevelDOWN(DBNAME));
+export async function setup(dbpath: string, filename = '', verbose = false): Promise<SetupType> {
+  const db = LevelUp(LevelDOWN(dbpath));
   try {
     const opt = {asBuffer: false};
     const [dictDate, version] =
@@ -47,7 +47,7 @@ export async function setup(DBNAME: string, filename = '', verbose = false): Pro
       if (verbose) { console.log(`${numWordsWritten} entries written`); }
     }
     batch.push({type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w)});
-    for (const key of (['kana', 'kanji'] as const )) {
+    for (const key of (['kana', 'kanji'] as const)) {
       for (const k of w[key]) {
         batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
         for (const substr of allSubstrings(k.text)) {
@@ -104,9 +104,7 @@ export async function getTags(db: Db): Promise<Simplified['tags']> {
 
 type BetterOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
 export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string> {
-  const gte = `raw/${key}`;
-  const ret = await drainStream<string>(db.createValueStream({gte, lte: gte, valueAsBuffer: false}));
-  return ret[0];
+  return db.get(`raw/${key}`, {asBuffer: false});
 }
 
 function allSubstrings(s: string) {
@@ -120,9 +118,9 @@ function allSubstrings(s: string) {
 
 if (module === require.main) {
   (async function() {
-    // Download jmdict-eng-3.0.1.json
+    // TODO: Download latest jmdict-eng JSON
     const DBNAME = 'test';
-    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.0.1.json', true);
+    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.1.0.json', true);
 
     console.log({dictDate, version});
 
@@ -139,5 +137,6 @@ if (module === require.main) {
       console.log(`${res.length} found with limit ${LIMIT}`);
     }
     { console.log(Object.keys(await getTags(db))); }
+    { console.log(await getField(db, "dictDate")); }
   })();
 }

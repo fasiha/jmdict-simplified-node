@@ -18,9 +18,15 @@ export interface Source {
   wasei: boolean;
   text?: string;
 }
+export enum GlossType {
+  literal = "literal",
+  figurative = "figurative",
+  explanation = "explanation",
+}
 export interface Gloss {
   lang: string;
   text: string;
+  type: GlossType|null;
 }
 export interface Sense {
   partOfSpeech: Tag[];

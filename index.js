@@ -8,6 +8,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+function __export(m) {
+    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
+}
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -15,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = require("fs");
 const leveldown_1 = __importDefault(require("leveldown"));
 const levelup_1 = __importDefault(require("levelup"));
+__export(require("./interfaces"));
 function setup(DBNAME, filename = '', verbose = false) {
     return __awaiter(this, void 0, void 0, function* () {
         const db = levelup_1.default(leveldown_1.default(DBNAME));
@@ -148,9 +152,9 @@ function allSubstrings(s) {
 if (module === require.main) {
     (function () {
         return __awaiter(this, void 0, void 0, function* () {
-            // Download jmdict-eng-3.0.1.json
+            // TODO: Download latest jmdict-eng JSON
             const DBNAME = 'test';
-            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.0.1.json', true);
+            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.1.0.json', true);
             console.log({ dictDate, version });
             const res = yield readingBeginning(db, 'いい'); // それ
             const resPartial = yield readingAnywhere(db, 'いい');

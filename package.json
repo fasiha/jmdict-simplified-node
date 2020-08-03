@@ -1,6 +1,6 @@
 {
   "name": "jmdict-simplified-node",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -8,7 +8,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Unlicense",
   "devDependencies": {
     "@types/leveldown": "^4.0.2",
     "@types/levelup": "^4.3.0",
