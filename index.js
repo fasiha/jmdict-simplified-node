@@ -19,9 +19,9 @@ const fs_1 = require("fs");
 const leveldown_1 = __importDefault(require("leveldown"));
 const levelup_1 = __importDefault(require("levelup"));
 __export(require("./interfaces"));
-function setup(DBNAME, filename = '', verbose = false) {
+function setup(dbpath, filename = '', verbose = false) {
     return __awaiter(this, void 0, void 0, function* () {
-        const db = levelup_1.default(leveldown_1.default(DBNAME));
+        const db = levelup_1.default(leveldown_1.default(dbpath));
         try {
             const opt = { asBuffer: false };
             const [dictDate, version] = yield Promise.all([db.get('raw/dictDate', opt), db.get('raw/version', opt)]);
@@ -33,7 +33,15 @@ function setup(DBNAME, filename = '', verbose = false) {
         if (!filename) {
             throw new Error('database not found but cannot create it if no `filename` given');
         }
-        const raw = JSON.parse(yield fs_1.promises.readFile(filename, 'utf8'));
+        let contents = '';
+        try {
+            contents = yield fs_1.promises.readFile(filename, 'utf8');
+        }
+        catch (_b) {
+            console.error(`Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`);
+            process.exit(1);
+        }
+        const raw = JSON.parse(contents);
         const maxBatches = 10000;
         let batch = [];
         {
@@ -133,9 +141,7 @@ function getTags(db) {
 exports.getTags = getTags;
 function getField(db, key) {
     return __awaiter(this, void 0, void 0, function* () {
-        const gte = `raw/${key}`;
-        const ret = yield drainStream(db.createValueStream({ gte, lte: gte, valueAsBuffer: false }));
-        return ret[0];
+        return db.get(`raw/${key}`, { asBuffer: false });
     });
 }
 exports.getField = getField;
@@ -168,6 +174,9 @@ if (module === require.main) {
             }
             {
                 console.log(Object.keys(yield getTags(db)));
+            }
+            {
+                console.log(yield getField(db, "dictDate"));
             }
         });
     })();

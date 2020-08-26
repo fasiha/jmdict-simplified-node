@@ -25,7 +25,14 @@ export async function setup(dbpath: string, filename = '', verbose = false): Pro
   }
 
   if (!filename) { throw new Error('database not found but cannot create it if no `filename` given'); }
-  const raw: Simplified = JSON.parse(await pfs.readFile(filename, 'utf8'));
+  let contents: string = '';
+  try {
+    contents = await pfs.readFile(filename, 'utf8')
+  } catch {
+    console.error(`Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`);
+    process.exit(1);
+  }
+  const raw: Simplified = JSON.parse(contents);
   const maxBatches = 10000;
   let batch: AbstractBatch[] = [];
 
