@@ -13,7 +13,7 @@ export type SetupType = {
   dictDate: string,
   version: string,
 };
-export async function setup(dbpath: string, filename = '', verbose = false): Promise<SetupType> {
+export async function setup(dbpath: string, filename = '', verbose = false, omitPartial = false): Promise<SetupType> {
   const db = LevelUp(LevelDOWN(dbpath));
   try {
     const opt = {asBuffer: false};
@@ -57,9 +57,11 @@ export async function setup(dbpath: string, filename = '', verbose = false): Pro
     for (const key of (['kana', 'kanji'] as const)) {
       for (const k of w[key]) {
         batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
-        for (const substr of allSubstrings(k.text)) {
-          // collisions in key ok, since value will be same
-          batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
+        if (!omitPartial) {
+          for (const substr of allSubstrings(k.text)) {
+            // collisions in key ok, since value will be same
+            batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
+          }
         }
       }
     }
@@ -127,7 +129,7 @@ if (module === require.main) {
   (async function() {
     // TODO: Download latest jmdict-eng JSON
     const DBNAME = 'test';
-    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.1.0.json', true);
+    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.1.0.json', true, false);
 
     console.log({dictDate, version});
 

@@ -19,7 +19,7 @@ const fs_1 = require("fs");
 const leveldown_1 = __importDefault(require("leveldown"));
 const levelup_1 = __importDefault(require("levelup"));
 __export(require("./interfaces"));
-function setup(dbpath, filename = '', verbose = false) {
+function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
     return __awaiter(this, void 0, void 0, function* () {
         const db = levelup_1.default(leveldown_1.default(dbpath));
         try {
@@ -70,9 +70,11 @@ function setup(dbpath, filename = '', verbose = false) {
             for (const key of ['kana', 'kanji']) {
                 for (const k of w[key]) {
                     batch.push({ type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id });
-                    for (const substr of allSubstrings(k.text)) {
-                        // collisions in key ok, since value will be same
-                        batch.push({ type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id });
+                    if (!omitPartial) {
+                        for (const substr of allSubstrings(k.text)) {
+                            // collisions in key ok, since value will be same
+                            batch.push({ type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id });
+                        }
                     }
                 }
             }
@@ -160,7 +162,7 @@ if (module === require.main) {
         return __awaiter(this, void 0, void 0, function* () {
             // TODO: Download latest jmdict-eng JSON
             const DBNAME = 'test';
-            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.1.0.json', true);
+            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.1.0.json', true, false);
             console.log({ dictDate, version });
             const res = yield readingBeginning(db, 'いい'); // それ
             const resPartial = yield readingAnywhere(db, 'いい');

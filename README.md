@@ -18,13 +18,14 @@ I expect you have a Node.js project already. In it,
 
 ## API
 
-### `setup(dbpath: string, filename = '', verbose = false): Promise<SetupType>`
+### `setup(dbpath: string, filename = '', verbose = false, omitPartial = false): Promise<SetupType>`
 Always call this first, it returns an object you need to call all other functions.
 
 Given
 - the `dbpath`, the path you want your LevelDB database to be stored,
 - optionally the `filename` of the JMDict-Simplified JSON,
-- and optionally a `verbose` flag,
+- optionally a `verbose` flag,
+- optionally an `omitPartial` flag (the default `false` will allow full-text searches, use `true` here for a much smaller database if you don't plan on using `readingAnywhere` or `kanjiAnywhere`)
 
 this function will return a promise of the following data:
 ```ts
@@ -61,6 +62,8 @@ kanjiBeginning(db: Db, prefix: string, limit?: number): Promise<Word[]>
 kanjiAnywhere(db: Db, text: string, limit?: number): Promise<Word[]>
 ```
 They search the reading or kanji (text) fields, either via a prefix (to match the beginning) or by free text to match anywhere.
+
+Recall that `readingAnywhere` and `kanjiAnywhere` will yield no results of `setup` was called with the `omitPartial` argument set to true.
 
 ### `getTags(db: Db): Promise<Simplified['tags']>`
 JMDict uses a large number of acronyms that it calls "tags", e.g.,
