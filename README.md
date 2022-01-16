@@ -16,6 +16,25 @@ I expect you have a Node.js project already. In it,
 3. import jmdict-simplified-node into your project: in TypeScript, this would be `import {setup as setupJmdict} from 'jmdict-simplified-node'`
 4. setup: `const jmdictPromise = setupJmdict('my-jmdict-simplified-db', 'jmdict-eng-3.1.0.json');`
 
+### Tutorial
+For full details about the API, see the next section, but in a nutshell, here's how you can start using this library after you complete the two installation steps above (install this npm package and download JMDict-Simplified):
+```ts
+import {readingBeginning, setup as setupJmdict} from 'jmdict-simplified-node';
+
+if (module === require.main) {
+  (async function main() {
+    const jmdictPromise =
+        setupJmdict('my-jmdict-simplified-db', 'jmdict-eng-3.1.0.json');
+    const {db} = await jmdictPromise;
+    const results = await readingBeginning(db, 'あおい', 3);
+    console.dir(results, {depth: null});
+  })();
+}
+```
+Drop the above in `demo.ts`, and run `npx ts-node demo.ts`. The first time you run this, it'll take a minute or two to cache all the entries before printing out three JMDict entries whose readings start with あおい. If you rerun it, it'll run in an instant.
+
+For full details on what these library functions are doing, and what other functions this library provides, read on.
+
 ## API
 
 ### `setup(dbpath: string, filename = '', verbose = false, omitPartial = false): Promise<SetupType>`
