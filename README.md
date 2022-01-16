@@ -26,6 +26,8 @@ if (module === require.main) {
     const jmdictPromise =
         setupJmdict('my-jmdict-simplified-db', 'jmdict-eng-3.1.0.json');
     const {db} = await jmdictPromise;
+    // This `db` is used by all functions in this API, so hang on to it.
+    // You only need to run `setup`/`setupJmdict` ONCE in your app, to get this `db`.
     const results = await readingBeginning(db, 'あおい', 3);
     console.dir(results, {depth: null});
   })();
@@ -38,7 +40,7 @@ For full details on what these library functions are doing, and what other funct
 ## API
 
 ### `setup(dbpath: string, filename = '', verbose = false, omitPartial = false): Promise<SetupType>`
-Always call this first, it returns an object you need to call all other functions.
+Always call this first before using any other function in this API: this function returns an object you need to call all other functions. You only need to call this function once in your entire application.
 
 Given
 - the `dbpath`, the path you want your LevelDB database to be stored,
