@@ -1,4 +1,3 @@
-"use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -8,20 +7,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-function __export(m) {
-    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
-}
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const fs_1 = require("fs");
-const leveldown_1 = __importDefault(require("leveldown"));
-const levelup_1 = __importDefault(require("levelup"));
-__export(require("./interfaces"));
-function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
+import { promises as pfs } from 'fs';
+import LevelDOWN from 'leveldown';
+import LevelUp from 'levelup';
+export * from './interfaces';
+export function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
     return __awaiter(this, void 0, void 0, function* () {
-        const db = levelup_1.default(leveldown_1.default(dbpath));
+        const db = LevelUp(LevelDOWN(dbpath));
         try {
             const opt = { asBuffer: false };
             const [dictDate, version] = yield Promise.all([db.get('raw/dictDate', opt), db.get('raw/version', opt)]);
@@ -35,57 +27,62 @@ function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
         }
         let contents = '';
         try {
-            contents = yield fs_1.promises.readFile(filename, 'utf8');
+            contents = yield pfs.readFile(filename, 'utf8');
         }
         catch (_b) {
             console.error(`Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`);
             process.exit(1);
         }
         const raw = JSON.parse(contents);
-        const maxBatches = 10000;
-        let batch = [];
-        {
-            // non-JSON, pure strings
-            const keys = ['dictDate', 'version'];
-            for (const key of keys) {
-                batch.push({ type: 'put', key: `raw/${key}`, value: raw[key] });
-            }
-        }
-        {
-            // to JSONify
-            const keys = ['tags', 'dictRevisions'];
-            for (const key of keys) {
-                batch.push({ type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key]) });
-            }
-        }
-        for (const [numWordsWritten, w] of raw.words.entries()) {
-            if (batch.length > maxBatches) {
-                yield db.batch(batch);
-                batch = [];
-                if (verbose) {
-                    console.log(`${numWordsWritten} entries written`);
+        try {
+            const maxBatches = 10000;
+            let batch = [];
+            {
+                // non-JSON, pure strings
+                const keys = ['dictDate', 'version'];
+                for (const key of keys) {
+                    batch.push({ type: 'put', key: `raw/${key}`, value: raw[key] });
                 }
             }
-            batch.push({ type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w) });
-            for (const key of ['kana', 'kanji']) {
-                for (const k of w[key]) {
-                    batch.push({ type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id });
-                    if (!omitPartial) {
-                        for (const substr of allSubstrings(k.text)) {
-                            // collisions in key ok, since value will be same
-                            batch.push({ type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id });
+            {
+                // to JSONify
+                const keys = ['tags', 'dictRevisions'];
+                for (const key of keys) {
+                    batch.push({ type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key]) });
+                }
+            }
+            for (const [numWordsWritten, w] of raw.words.entries()) {
+                if (batch.length > maxBatches) {
+                    yield db.batch(batch);
+                    batch = [];
+                    if (verbose) {
+                        console.log(`${numWordsWritten} entries written`);
+                    }
+                }
+                batch.push({ type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w) });
+                for (const key of ['kana', 'kanji']) {
+                    for (const k of w[key]) {
+                        batch.push({ type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id });
+                        if (!omitPartial) {
+                            for (const substr of allSubstrings(k.text)) {
+                                // collisions in key ok, since value will be same
+                                batch.push({ type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id });
+                            }
                         }
                     }
                 }
             }
+            if (batch.length) {
+                yield db.batch(batch);
+            }
         }
-        if (batch.length) {
-            yield db.batch(batch);
+        catch (e) {
+            yield db.close();
+            throw e;
         }
         return { db, dictDate: raw.dictDate, version: raw.version };
     });
 }
-exports.setup = setup;
 function drainStream(stream) {
     const ret = [];
     return new Promise((resolve, reject) => {
@@ -107,46 +104,39 @@ function searchAnywhere(db, text, key = 'kana', limit) {
         return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit })));
     });
 }
-function idsToWords(db, idxs) {
+export function idsToWords(db, idxs) {
     return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
 }
-exports.idsToWords = idsToWords;
-function readingBeginning(db, prefix, limit = -1) {
+export function readingBeginning(db, prefix, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchBeginning(db, prefix, 'kana', limit);
     });
 }
-exports.readingBeginning = readingBeginning;
-function readingAnywhere(db, text, limit = -1) {
+export function readingAnywhere(db, text, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchAnywhere(db, text, 'kana', limit);
     });
 }
-exports.readingAnywhere = readingAnywhere;
-function kanjiBeginning(db, prefix, limit = -1) {
+export function kanjiBeginning(db, prefix, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchBeginning(db, prefix, 'kanji', limit);
     });
 }
-exports.kanjiBeginning = kanjiBeginning;
-function kanjiAnywhere(db, text, limit = -1) {
+export function kanjiAnywhere(db, text, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchAnywhere(db, text, 'kanji', limit);
     });
 }
-exports.kanjiAnywhere = kanjiAnywhere;
-function getTags(db) {
+export function getTags(db) {
     return __awaiter(this, void 0, void 0, function* () {
         return db.get('raw/tags', { asBuffer: false }).then(x => JSON.parse(x));
     });
 }
-exports.getTags = getTags;
-function getField(db, key) {
+export function getField(db, key) {
     return __awaiter(this, void 0, void 0, function* () {
         return db.get(`raw/${key}`, { asBuffer: false });
     });
 }
-exports.getField = getField;
 function allSubstrings(s) {
     const slen = s.length;
     let ret = new Set();

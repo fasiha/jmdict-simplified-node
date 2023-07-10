@@ -33,40 +33,45 @@ export async function setup(dbpath: string, filename = '', verbose = false, omit
     process.exit(1);
   }
   const raw: Simplified = JSON.parse(contents);
-  const maxBatches = 10000;
-  let batch: AbstractBatch[] = [];
-
-  {
-    // non-JSON, pure strings
-    const keys: (keyof Simplified)[] = ['dictDate', 'version'];
-    for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: raw[key]}) }
-  }
-  {
-    // to JSONify
-    const keys: (keyof Simplified)[] = ['tags', 'dictRevisions'];
-    for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key])}) }
-  }
-
-  for (const [numWordsWritten, w] of raw.words.entries()) {
-    if (batch.length > maxBatches) {
-      await db.batch(batch);
-      batch = [];
-      if (verbose) { console.log(`${numWordsWritten} entries written`); }
+  try {
+    const maxBatches = 10000;
+    let batch: AbstractBatch[] = [];
+  
+    {
+      // non-JSON, pure strings
+      const keys: (keyof Simplified)[] = ['dictDate', 'version'];
+      for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: raw[key]}) }
     }
-    batch.push({type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w)});
-    for (const key of (['kana', 'kanji'] as const)) {
-      for (const k of w[key]) {
-        batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
-        if (!omitPartial) {
-          for (const substr of allSubstrings(k.text)) {
-            // collisions in key ok, since value will be same
-            batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
+    {
+      // to JSONify
+      const keys: (keyof Simplified)[] = ['tags', 'dictRevisions'];
+      for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key])}) }
+    }
+  
+    for (const [numWordsWritten, w] of raw.words.entries()) {
+      if (batch.length > maxBatches) {
+        await db.batch(batch);
+        batch = [];
+        if (verbose) { console.log(`${numWordsWritten} entries written`); }
+      }
+      batch.push({type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w)});
+      for (const key of (['kana', 'kanji'] as const)) {
+        for (const k of w[key]) {
+          batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
+          if (!omitPartial) {
+            for (const substr of allSubstrings(k.text)) {
+              // collisions in key ok, since value will be same
+              batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
+            }
           }
         }
       }
     }
+    if (batch.length) { await db.batch(batch); }
+  } catch (e) {
+    await db.close()
+    throw e;
   }
-  if (batch.length) { await db.batch(batch); }
   return {db, dictDate: raw.dictDate, version: raw.version};
 }
 
