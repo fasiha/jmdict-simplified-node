@@ -179,13 +179,13 @@ if (module === require.main) {
         return __awaiter(this, void 0, void 0, function* () {
             // TODO: Download latest jmdict-eng JSON
             const DBNAME = 'test';
-            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.1.0.json', true, false);
+            const { db, dictDate, version } = yield setup(DBNAME, 'jmdict-eng-3.5.0.json', true, false);
             console.log({ dictDate, version });
             const res = yield readingBeginning(db, 'いい'); // それ
             const resPartial = yield readingAnywhere(db, 'いい');
             console.log(`${res.length} exact found`);
             console.log(`${resPartial.length} partial found`);
-            console.log(yield idsToWords(db, ['1383480']));
+            console.log(yield idsToWords(db, ['1571070']));
             {
                 const LIMIT = 4;
                 const res = yield readingBeginning(db, 'いい', LIMIT);

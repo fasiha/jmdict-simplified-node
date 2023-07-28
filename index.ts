@@ -153,7 +153,7 @@ if (module === require.main) {
   (async function () {
     // TODO: Download latest jmdict-eng JSON
     const DBNAME = 'test';
-    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.1.0.json', true, false);
+    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.5.0.json', true, false);
 
     console.log({dictDate, version});
 
@@ -162,7 +162,7 @@ if (module === require.main) {
     console.log(`${res.length} exact found`);
     console.log(`${resPartial.length} partial found`);
 
-    console.log(await idsToWords(db, ['1383480']));
+    console.log(await idsToWords(db, ['1571070']));
 
     {
       const LIMIT = 4;
