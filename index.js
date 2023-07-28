@@ -1,3 +1,4 @@
+"use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -7,13 +8,20 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-import { promises as pfs } from 'fs';
-import LevelDOWN from 'leveldown';
-import LevelUp from 'levelup';
-export * from './interfaces';
-export function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
+function __export(m) {
+    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
+}
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const fs_1 = require("fs");
+const leveldown_1 = __importDefault(require("leveldown"));
+const levelup_1 = __importDefault(require("levelup"));
+__export(require("./interfaces"));
+function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
     return __awaiter(this, void 0, void 0, function* () {
-        const db = LevelUp(LevelDOWN(dbpath));
+        const db = levelup_1.default(leveldown_1.default(dbpath));
         try {
             const opt = { asBuffer: false };
             const [dictDate, version] = yield Promise.all([db.get('raw/dictDate', opt), db.get('raw/version', opt)]);
@@ -27,7 +35,7 @@ export function setup(dbpath, filename = '', verbose = false, omitPartial = fals
         }
         let contents = '';
         try {
-            contents = yield pfs.readFile(filename, 'utf8');
+            contents = yield fs_1.promises.readFile(filename, 'utf8');
         }
         catch (_b) {
             console.error(`Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`);
@@ -83,6 +91,7 @@ export function setup(dbpath, filename = '', verbose = false, omitPartial = fals
         return { db, dictDate: raw.dictDate, version: raw.version };
     });
 }
+exports.setup = setup;
 function drainStream(stream) {
     const ret = [];
     return new Promise((resolve, reject) => {
@@ -104,39 +113,46 @@ function searchAnywhere(db, text, key = 'kana', limit) {
         return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit })));
     });
 }
-export function idsToWords(db, idxs) {
+function idsToWords(db, idxs) {
     return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
 }
-export function readingBeginning(db, prefix, limit = -1) {
+exports.idsToWords = idsToWords;
+function readingBeginning(db, prefix, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchBeginning(db, prefix, 'kana', limit);
     });
 }
-export function readingAnywhere(db, text, limit = -1) {
+exports.readingBeginning = readingBeginning;
+function readingAnywhere(db, text, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchAnywhere(db, text, 'kana', limit);
     });
 }
-export function kanjiBeginning(db, prefix, limit = -1) {
+exports.readingAnywhere = readingAnywhere;
+function kanjiBeginning(db, prefix, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchBeginning(db, prefix, 'kanji', limit);
     });
 }
-export function kanjiAnywhere(db, text, limit = -1) {
+exports.kanjiBeginning = kanjiBeginning;
+function kanjiAnywhere(db, text, limit = -1) {
     return __awaiter(this, void 0, void 0, function* () {
         return searchAnywhere(db, text, 'kanji', limit);
     });
 }
-export function getTags(db) {
+exports.kanjiAnywhere = kanjiAnywhere;
+function getTags(db) {
     return __awaiter(this, void 0, void 0, function* () {
         return db.get('raw/tags', { asBuffer: false }).then(x => JSON.parse(x));
     });
 }
-export function getField(db, key) {
+exports.getTags = getTags;
+function getField(db, key) {
     return __awaiter(this, void 0, void 0, function* () {
         return db.get(`raw/${key}`, { asBuffer: false });
     });
 }
+exports.getField = getField;
 function allSubstrings(s) {
     const slen = s.length;
     let ret = new Set();
