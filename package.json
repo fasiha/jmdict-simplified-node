@@ -12,9 +12,9 @@
   "author": "",
   "license": "Unlicense",
   "devDependencies": {
-    "@types/readable-stream": "^4.0.0",
     "@types/node": "^12.12.17",
-    "typescript": "^3.7.3"
+    "@types/readable-stream": "^4.0.0",
+    "typescript": "^5.1.6"
   },
   "dependencies": {
     "abstract-level": "^1.0.3",
