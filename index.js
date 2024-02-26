@@ -1,4 +1,14 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !exports.hasOwnProperty(p)) __createBinding(exports, m, p);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -8,17 +18,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-function __export(m) {
-    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
-}
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getField = exports.getTags = exports.kanjiAnywhere = exports.kanjiBeginning = exports.readingAnywhere = exports.readingBeginning = exports.idsToWords = exports.getXrefs = exports.setup = void 0;
 const fs_1 = require("fs");
 const leveldown_1 = __importDefault(require("leveldown"));
 const levelup_1 = __importDefault(require("levelup"));
-__export(require("./interfaces"));
+__exportStar(require("./interfaces"), exports);
 function setup(dbpath, filename = '', verbose = false, omitPartial = false) {
     return __awaiter(this, void 0, void 0, function* () {
         const db = levelup_1.default(leveldown_1.default(dbpath));
@@ -107,6 +115,42 @@ function searchAnywhere(db, text, key = 'kana', limit) {
         return idsToWords(db, yield drainStream(db.createValueStream({ gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit })));
     });
 }
+function get(db, text, key = 'kana') {
+    return __awaiter(this, void 0, void 0, function* () {
+        return searchBeginning(db, text + '-', key, -1);
+    });
+}
+function getXrefs(db, xref) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const [first, second] = xref;
+        if (typeof second === 'string') {
+            // per DTD http://www.edrdg.org/jmdict/jmdict_dtd_h.html `first`
+            // will be keb (kanji) and `second` will have a reb (reading)
+            // potentially with a center-dot separating it from a sense number.
+            const reb = second.split('・')[0];
+            const keb = first;
+            const kebHits = yield get(db, keb, 'kanji');
+            const rebMatches = kebHits.filter(w => w.kana.some(k => k.text === reb));
+            return rebMatches;
+        }
+        else {
+            // all we have is `first`, which could be a keb or reb (kanji or
+            // reading/kana) so search both
+            const hits = (yield get(db, first, 'kanji')).concat(yield get(db, first, 'kana'));
+            const seen = new Set(); // dedupe
+            const result = [];
+            for (const hit of hits) {
+                if (seen.has(hit.id)) {
+                    continue;
+                }
+                seen.add(hit.id);
+                result.push(hit);
+            }
+            return result;
+        }
+    });
+}
+exports.getXrefs = getXrefs;
 function idsToWords(db, idxs) {
     return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, { asBuffer: false }).then(x => JSON.parse(x))));
 }
@@ -179,6 +223,16 @@ if (module === require.main) {
             }
             {
                 console.log(yield getField(db, "dictDate"));
+            }
+            {
+                // all the various forms of `Xref`s
+                const res = yield readingBeginning(db, 'かぜひく');
+                const xref = res[0].sense[0].related[0];
+                const related = yield getXrefs(db, xref);
+                console.log(related.map(r => r.kanji[0].text));
+                console.log((yield getXrefs(db, ['かも知れない', 'かもしれない'])).map(r => r.kanji[0].text));
+                console.log((yield getXrefs(db, ['おばあさん', 2])).map(r => r.kanji[0].text));
+                console.log((yield getXrefs(db, ['振れる', 'ふれる・2', 2])).map(r => r.kanji[0].text));
             }
         });
     })();

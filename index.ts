@@ -3,7 +3,7 @@ import {promises as pfs} from 'fs';
 import LevelDOWN from 'leveldown';
 import LevelUp from 'levelup';
 
-import {Simplified, Word} from './interfaces';
+import {Simplified, Word, Xref} from './interfaces';
 export * from './interfaces';
 type Db = ReturnType<typeof LevelUp>;
 
@@ -90,6 +90,38 @@ async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana'
   return idsToWords(db,
                     await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit})));
 }
+
+async function get(db: Db, text: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
+  return searchBeginning(db, text + '-', key, -1);
+}
+
+export async function getXrefs(db: Db, xref: Xref): Promise<Word[]> {
+  const [first, second] = xref;
+  if (typeof second === 'string') {
+    // per DTD http://www.edrdg.org/jmdict/jmdict_dtd_h.html `first`
+    // will be keb (kanji) and `second` will have a reb (reading)
+    // potentially with a center-dot separating it from a sense number.
+    const reb = second.split('・')[0];
+    const keb = first;
+    const kebHits = await get(db, keb, 'kanji');
+    const rebMatches = kebHits.filter(w => w.kana.some(k => k.text === reb))
+    return rebMatches;
+  } else {
+    // all we have is `first`, which could be a keb or reb (kanji or
+    // reading/kana) so search both
+    const hits = (await get(db, first, 'kanji')).concat(await get(db, first, 'kana'));
+
+    const seen = new Set(); // dedupe
+    const result: Word[] = [];
+    for (const hit of hits) {
+      if (seen.has(hit.id)) { continue; }
+      seen.add(hit.id);
+      result.push(hit);
+    }
+    return result;
+  }
+}
+
 export function idsToWords(db: Db, idxs: string[]): Promise<Word[]> {
   return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
 }
@@ -147,5 +179,15 @@ if (module === require.main) {
     }
     { console.log(Object.keys(await getTags(db))); }
     { console.log(await getField(db, "dictDate")); }
+    {
+      // all the various forms of `Xref`s
+      const res = await readingBeginning(db, 'かぜひく');
+      const xref = res[0].sense[0].related[0];
+      const related = await getXrefs(db, xref);
+      console.log(related.map(r => r.kanji[0].text));
+      console.log((await getXrefs(db, ['かも知れない', 'かもしれない'])).map(r => r.kanji[0].text));
+      console.log((await getXrefs(db, ['おばあさん', 2])).map(r => r.kanji[0].text));
+      console.log((await getXrefs(db, ['振れる', 'ふれる・2', 2])).map(r => r.kanji[0].text));
+    }
   })();
 }

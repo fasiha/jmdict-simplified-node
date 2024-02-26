@@ -11,7 +11,7 @@ export interface Kana {
   tags: Tag[];
   appliesToKanji: string[];
 }
-export type Xref = [string, string, number]|[string, number]|[string];
+export type Xref = [string, string, number]|[string, string]|[string, number]|[string];
 export interface Source {
   lang: string;
   full: boolean;

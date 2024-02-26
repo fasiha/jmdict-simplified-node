@@ -105,3 +105,12 @@ This function lets you access these.
 
 ### `idsToWords(db: Db, idxs: string[]): Promise<Word[]>`
 This helper function will expand a list of JMDict word IDs to the full definition. This might be helpful if you only transmit words' IDs, for example.
+
+### `getXrefs(db: Db, xref: Xref): Promise<Word[]>`
+Definitions can have `related` and `antonym` references which can be resolved with this utility. It returns an array of other definitions for a given `Xref` cross-reference because I can't guarantee that the `Xref` is exactly accurate. Most of the time this should return an array of exactly one element (hopefully).
+
+## Changelog
+
+### 1.2.0
+
+Introduce `getXrefs` utility.
