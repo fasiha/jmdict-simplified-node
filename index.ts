@@ -1,120 +1,275 @@
-import {AbstractBatch} from 'abstract-leveldown';
-import {promises as pfs} from 'fs';
-import LevelDOWN from 'leveldown';
-import LevelUp from 'levelup';
+import Sqlite, { type Database as Db } from "better-sqlite3";
+import { promises as pfs } from "fs";
 
-import {Simplified, Word, Xref} from './interfaces';
-export * from './interfaces';
-type Db = ReturnType<typeof LevelUp>;
+import type { Simplified, Word, Xref } from "./interfaces";
+export * from "./interfaces";
 
-// Takes ~90 seconds on 2015-era MacBook Pro, producing 140 MB Leveldb directory ("jmdict-eng-3.1.0.json").
 export type SetupType = {
-  db: Db,
-  dictDate: string,
-  version: string,
+  db: Db;
+  dictDate: string;
+  version: string;
+  tags: Simplified["tags"];
 };
-export async function setup(dbpath: string, filename = '', verbose = false, omitPartial = false): Promise<SetupType> {
-  const db = LevelUp(LevelDOWN(dbpath));
+
+const tokenize = (s: string) => s.split("").join(" ");
+
+export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
+  const db = new Sqlite(dbpath);
+  db.pragma("journal_mode = WAL");
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS metadata (
+    key TEXT UNIQUE,
+    value_json TEXT NOT NULL
+  );
+`);
+
+  // Check if the DB is already populated.
+  const getMetaStmt = db
+    .prepare("SELECT value_json FROM metadata WHERE key = ?")
+    .pluck();
+  const get = (s: string) => JSON.parse(getMetaStmt.get(s) as string);
   try {
-    const opt = {asBuffer: false};
-    const [dictDate, version] =
-        await Promise.all([db.get('raw/dictDate', opt), db.get('raw/version', opt)]) as string[];
-    return {db, dictDate, version};
-  } catch {
-    // pass
-  }
-
-  if (!filename) { throw new Error('database not found but cannot create it if no `filename` given'); }
-  let contents: string = '';
-  try {
-    contents = await pfs.readFile(filename, 'utf8')
-  } catch {
-    console.error(`Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`);
-    process.exit(1);
-  }
-  const raw: Simplified = JSON.parse(contents);
-  const maxBatches = 10000;
-  let batch: AbstractBatch[] = [];
-
-  {
-    // non-JSON, pure strings
-    const keys: (keyof Simplified)[] = ['dictDate', 'version'];
-    for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: raw[key]}) }
-  }
-  {
-    // to JSONify
-    const keys: (keyof Simplified)[] = ['tags', 'dictRevisions'];
-    for (const key of keys) { batch.push({type: 'put', key: `raw/${key}`, value: JSON.stringify(raw[key])}) }
-  }
-
-  for (const [numWordsWritten, w] of raw.words.entries()) {
-    if (batch.length > maxBatches) {
-      await db.batch(batch);
-      batch = [];
-      if (verbose) { console.log(`${numWordsWritten} entries written`); }
-    }
-    batch.push({type: 'put', key: `raw/words/${w.id}`, value: JSON.stringify(w)});
-    for (const key of (['kana', 'kanji'] as const)) {
-      for (const k of w[key]) {
-        batch.push({type: 'put', key: `indexes/${key}/${k.text}-${w.id}`, value: w.id});
-        if (!omitPartial) {
-          for (const substr of allSubstrings(k.text)) {
-            // collisions in key ok, since value will be same
-            batch.push({type: 'put', key: `indexes/partial-${key}/${substr}-${w.id}`, value: w.id});
-          }
-        }
-      }
+    return {
+      db,
+      // if there's no data or if it's mal-formed, this will throw.
+      // If that happens, we fall through to re-populating the DB.
+      version: get("version"),
+      dictDate: get("dictDate"),
+      tags: get("tags"),
+    };
+  } catch (e) {
+    // SyntaxError means JSON.parse failed, which is fine!
+    if (!(e instanceof SyntaxError)) {
+      // Any other error is not fine
+      throw e;
     }
   }
-  if (batch.length) { await db.batch(batch); }
-  return {db, dictDate: raw.dictDate, version: raw.version};
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS entries (
+    id TEXT UNIQUE,
+    entry_json TEXT NOT NULL
+  );
+`);
+
+  db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS kanjis USING fts5(
+    text,
+    entry_id UNINDEXED,
+    tokenize = 'unicode61'
+  );
+`);
+
+  db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS kanas USING fts5(
+    text,
+    entry_id UNINDEXED,
+    tokenize = 'unicode61'
+  );
+`);
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS raws (
+    text TEXT NOT NULL,
+    entry_id TEXT NOT NULL,
+    UNIQUE(text, entry_id)
+  );
+`);
+
+  const data: Simplified = await (async () => {
+    // The main reason to do this processing in a function is
+    // so the contents of the file can be garbage-collected.
+
+    // filename provided?
+    if (!filename) {
+      console.error(
+        "database not found but cannot create it if no `filename` given"
+      );
+      process.exit(1);
+    }
+
+    // file can be read?
+    let contents: string = "";
+    try {
+      contents = await pfs.readFile(filename, "utf8");
+    } catch {
+      console.error(
+        `Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`
+      );
+      process.exit(1);
+    }
+
+    // file can be parsed?
+    return JSON.parse(contents) as Simplified;
+  })();
+
+  const insertMeta = db.prepare(
+    "INSERT INTO metadata (key, value_json) VALUES (?, ?)"
+  );
+  const insertEntry = db.prepare(
+    "INSERT INTO entries (id, entry_json) VALUES (?, ?)"
+  );
+  const insertKanji = db.prepare(
+    "INSERT INTO kanjis (entry_id, text) VALUES (?, ?)"
+  );
+  const insertKana = db.prepare(
+    "INSERT INTO kanas (entry_id, text) VALUES (?, ?)"
+  );
+  const insertRaw = db.prepare(
+    "INSERT INTO raws (entry_id, text) VALUES (?, ?)"
+  );
+
+  for (const key in data) {
+    if (key !== "words") {
+      insertMeta.run(
+        key,
+        JSON.stringify((data as unknown as Record<string, unknown>)[key])
+      );
+    }
+  }
+
+  for (const entry of data.words) {
+    insertEntry.run(entry.id, JSON.stringify(entry));
+
+    for (const k of entry.kanji) {
+      insertKanji.run(entry.id, tokenize(k.text));
+      insertRaw.run(entry.id, k.text);
+    }
+
+    for (const k of entry.kana) {
+      insertKana.run(entry.id, tokenize(k.text));
+      insertRaw.run(entry.id, k.text);
+    }
+  }
+
+  return {
+    db,
+    version: data.version,
+    dictDate: data.dictDate,
+    tags: data.tags,
+  };
 }
 
-function drainStream<T>(stream: NodeJS.ReadableStream): Promise<T[]> {
-  const ret: T[] = [];
-  return new Promise((resolve, reject) => {
-    stream.on('data', x => ret.push(x))
-        .on('error', e => reject(e))
-        .on('close', () => resolve(ret))
-        .on('end', () => resolve(ret));
-  })
+interface FtsArgs {
+  db: Db;
+  text: string;
+  /**
+   * If true, search kanji (otherwise kana/reading).
+   */
+  kanji: boolean;
+  /**
+   * If true, only match at the beginning of the word.
+   * Else, ok to match in the middle.
+   */
+  beginning: boolean;
+  /**
+   * If true, do a fuzzy search where each unique character
+   * in `text` will be present somewhere in the match.
+   *
+   * Else, `text` must be found exactly in the word.
+   */
+  fuzzy?: boolean;
+  limit?: number;
+  offset?: number;
+}
+function fts({
+  db,
+  text,
+  kanji,
+  beginning,
+  fuzzy = false,
+  limit = -1,
+  offset = 0,
+}: FtsArgs): Word[] {
+  if (!text) {
+    return [];
+  }
+
+  if (beginning && !fuzzy) {
+    return get(db, `${text}%`, { exact: false, limit, offset });
+  }
+
+  const ftsTable = kanji ? "kanjis" : "kanas";
+  const query = `
+    SELECT
+      entries.entry_json
+    FROM
+      ${ftsTable}
+    JOIN
+      entries
+    ON
+      ${ftsTable}.entry_id = entries.id
+    WHERE
+      ${ftsTable}.text MATCH ?
+    LIMIT ? OFFSET ?;
+  `;
+
+  const tokenized = fuzzy ? tokenize(text) : `"${tokenize(text)}"`;
+  const token = beginning ? `^${tokenized}*` : tokenized;
+  const raws = db.prepare(query).pluck().all(token, limit, offset) as string[];
+  return raws.map((r) => JSON.parse(r) as Word);
 }
 
-async function searchBeginning(db: Db, prefix: string, key: 'kana'|'kanji' = 'kana', limit: number): Promise<Word[]> {
-  const gte = `indexes/${key}/${prefix}`;
-  return idsToWords(db,
-                    await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit})));
+interface GetExtra {
+  /**
+   * If true (default), `text` must match exactly. If false, `text` is treated
+   * as a prefix and any entry starting with `text` is returned.
+   */
+  exact?: boolean;
+  limit?: number;
+  offset?: number;
 }
-async function searchAnywhere(db: Db, text: string, key: 'kana'|'kanji' = 'kana', limit: number): Promise<Word[]> {
-  const gte = `indexes/partial-${key}/${text}`;
-  return idsToWords(db,
-                    await drainStream(db.createValueStream({gte, lt: gte + '\uFE0F', valueAsBuffer: false, limit})));
+export function get(
+  db: Db,
+  text: string,
+  { exact = true, limit = -1, offset = 0 }: GetExtra = {}
+): Word[] {
+  const GET_QUERY = `
+    SELECT
+      entries.entry_json
+    FROM
+      raws
+    JOIN
+      entries
+    ON
+      raws.entry_id = entries.id
+    WHERE
+      raws.text LIKE ?
+    LIMIT ? OFFSET ?;
+  `;
+  const search = exact ? text : `${text}%`;
+  const rows = db
+    .prepare(GET_QUERY)
+    .pluck()
+    .all(search, limit, offset) as string[];
+  return rows.map((r) => JSON.parse(r) as Word);
 }
 
-async function get(db: Db, text: string, key: 'kana'|'kanji' = 'kana'): Promise<Word[]> {
-  return searchBeginning(db, text + '-', key, -1);
-}
-
-export async function getXrefs(db: Db, xref: Xref): Promise<Word[]> {
+export function getXrefs(db: Db, xref: Xref): Word[] {
   const [first, second] = xref;
-  if (typeof second === 'string') {
+  if (typeof second === "string") {
     // per DTD http://www.edrdg.org/jmdict/jmdict_dtd_h.html `first`
     // will be keb (kanji) and `second` will have a reb (reading)
     // potentially with a center-dot separating it from a sense number.
-    const reb = second.split('・')[0];
+    const reb = second.split("・")[0];
     const keb = first;
-    const kebHits = await get(db, keb, 'kanji');
-    const rebMatches = kebHits.filter(w => w.kana.some(k => k.text === reb))
+    const kebHits = get(db, keb);
+    const rebMatches = kebHits.filter((w) =>
+      w.kana.some((k) => k.text === reb)
+    );
     return rebMatches;
   } else {
     // all we have is `first`, which could be a keb or reb (kanji or
     // reading/kana) so search both
-    const hits = (await get(db, first, 'kanji')).concat(await get(db, first, 'kana'));
+    const hits = get(db, first).concat(get(db, first));
 
     const seen = new Set(); // dedupe
     const result: Word[] = [];
     for (const hit of hits) {
-      if (seen.has(hit.id)) { continue; }
+      if (seen.has(hit.id)) {
+        continue;
+      }
       seen.add(hit.id);
       result.push(hit);
     }
@@ -122,72 +277,85 @@ export async function getXrefs(db: Db, xref: Xref): Promise<Word[]> {
   }
 }
 
-export function idsToWords(db: Db, idxs: string[]): Promise<Word[]> {
-  return Promise.all(idxs.map(i => db.get(`raw/words/${i}`, {asBuffer: false}).then(x => JSON.parse(x))))
+function idToWord(db: Db, id: string): Word {
+  const query = `SELECT entry_json FROM entries WHERE id = ?`;
+  const row = db.prepare(query).pluck().get(id) as string;
+  return JSON.parse(row) as Word;
 }
 
-export async function readingBeginning(db: Db, prefix: string, limit = -1) {
-  return searchBeginning(db, prefix, 'kana', limit);
-}
-export async function readingAnywhere(db: Db, text: string, limit = -1) {
-  return searchAnywhere(db, text, 'kana', limit);
-}
-export async function kanjiBeginning(db: Db, prefix: string, limit = -1) {
-  return searchBeginning(db, prefix, 'kanji', limit);
-}
-export async function kanjiAnywhere(db: Db, text: string, limit = -1) {
-  return searchAnywhere(db, text, 'kanji', limit);
+export function idsToWords(db: Db, idxs: string[]): Word[] {
+  return idxs.map((id) => idToWord(db, id));
 }
 
-export async function getTags(db: Db): Promise<Simplified['tags']> {
-  return db.get('raw/tags', {asBuffer: false}).then(x => JSON.parse(x));
+export function readingBeginning(
+  db: Db,
+  prefix: string,
+  limit = -1,
+  offset = 0
+) {
+  return get(db, prefix, {
+    exact: false,
+    limit,
+    offset,
+  });
+}
+export function readingAnywhere(db: Db, text: string, limit = -1, offset = 0) {
+  return fts({
+    db,
+    text,
+    kanji: false,
+    beginning: false,
+    limit,
+    offset,
+  });
+}
+export const kanjiBeginning = readingBeginning;
+
+export function kanjiAnywhere(db: Db, text: string, limit = -1, offset = 0) {
+  return fts({
+    db,
+    text,
+    kanji: true,
+    beginning: false,
+    limit,
+    offset,
+  });
 }
 
-type BetterOmit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
-export async function getField(db: Db, key: keyof BetterOmit<Simplified, 'words'>): Promise<string> {
-  return db.get(`raw/${key}`, {asBuffer: false});
+export function readingFuzzy(db: Db, text: string, limit = -1, offset = 0) {
+  return fts({
+    db,
+    text,
+    kanji: false,
+    beginning: false,
+    fuzzy: true,
+    limit,
+    offset,
+  });
+}
+export function kanjiFuzzy(db: Db, text: string, limit = -1, offset = 0) {
+  return fts({
+    db,
+    text,
+    kanji: true,
+    beginning: false,
+    fuzzy: true,
+    limit,
+    offset,
+  });
 }
 
-function allSubstrings(s: string) {
-  const slen = s.length;
-  let ret: Set<string> = new Set();
-  for (let start = 0; start < slen; start++) {
-    for (let length = 1; length <= slen - start; length++) { ret.add(s.substr(start, length)); }
-  }
-  return ret;
+export function getTags(db: Db): Simplified["tags"] {
+  const query = `SELECT value_json FROM metadata WHERE key = 'tags'`;
+  const row = db.prepare(query).pluck().get() as string;
+  return JSON.parse(row) as Simplified["tags"];
 }
 
-if (module === require.main) {
-  (async function() {
-    // TODO: Download latest jmdict-eng JSON
-    const DBNAME = 'test';
-    const {db, dictDate, version} = await setup(DBNAME, 'jmdict-eng-3.1.0.json', true, false);
-
-    console.log({dictDate, version});
-
-    const res = await readingBeginning(db, 'いい'); // それ
-    const resPartial = await readingAnywhere(db, 'いい');
-    console.log(`${res.length} exact found`);
-    console.log(`${resPartial.length} partial found`);
-
-    console.log(await idsToWords(db, ['1383480']));
-
-    {
-      const LIMIT = 4;
-      const res = await readingBeginning(db, 'いい', LIMIT);
-      console.log(`${res.length} found with limit ${LIMIT}`);
-    }
-    { console.log(Object.keys(await getTags(db))); }
-    { console.log(await getField(db, "dictDate")); }
-    {
-      // all the various forms of `Xref`s
-      const res = await readingBeginning(db, 'かぜひく');
-      const xref = res[0].sense[0].related[0];
-      const related = await getXrefs(db, xref);
-      console.log(related.map(r => r.kanji[0].text));
-      console.log((await getXrefs(db, ['かも知れない', 'かもしれない'])).map(r => r.kanji[0].text));
-      console.log((await getXrefs(db, ['おばあさん', 2])).map(r => r.kanji[0].text));
-      console.log((await getXrefs(db, ['振れる', 'ふれる・2', 2])).map(r => r.kanji[0].text));
-    }
-  })();
+export function getField(
+  db: Db,
+  key: keyof Omit<Simplified, "words">
+): unknown {
+  const query = `SELECT value_json FROM metadata WHERE key = ?`;
+  const row = db.prepare(query).pluck().get(key) as string;
+  return JSON.parse(row);
 }
