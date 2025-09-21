@@ -170,6 +170,8 @@ Upgrade: the API is mostly backwards-compatible so most users can upgrade withou
 - `setup` accepts fewer arguments (no more `verbose`, `omitPartial`: setup is always quiet and will always set up partial/anywhere searches).
 - If you called `setup` with an empty filename because you assumed the database was already setup, of course you'll need to rerun whatever code you initially ran to create the database.
 
+Small caveat: since the search functions are no longer async, you might be able to simplify your code to avoid needless `await`s.
+
 ### 1.2.0
 
 Introduce `getXrefs` utility.
