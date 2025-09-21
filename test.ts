@@ -76,4 +76,34 @@ import type { Word } from "./interfaces";
     getXrefs(db, ["振れる", "ふれる・2", 2]),
   ];
   assert(xrefs.every((arr) => arr.length >= 1));
+
+  {
+    // pagination
+    const page1 = readingAnywhere(db, "あい", 5, 0);
+    const page2 = readingAnywhere(db, "あい", 5, 5);
+
+    const bothPages = readingAnywhere(db, "あい", 10);
+
+    assert(page1.length === 5);
+    assert(page2.length === 5);
+    assert(bothPages.length === 10);
+    assert(
+      [...page1, ...page2].map((w) => w.id).join("/") ===
+        bothPages.map((w) => w.id).join("/")
+    );
+
+    const noResults = readingAnywhere(db, "卵焼きもち", -1, 10000);
+    assert(noResults.length === 0);
+  }
+  {
+    // more pagination
+    const NUM_PAGES = 3;
+    const PAGE_SIZE = 10;
+    const hits = [];
+    for (let page = 0; page < NUM_PAGES; page++) {
+      const thisPage = readingBeginning(db, "あいさつ", PAGE_SIZE, hits.length);
+      hits.push(...thisPage);
+      console.log(`Page ${page + 1}: total hits ${hits.length}`);
+    }
+  }
 })();
