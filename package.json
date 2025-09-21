@@ -2,15 +2,35 @@
   "name": "jmdict-simplified-node",
   "version": "2.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "tsx test.ts"
+    "build": "tsup index.ts --format cjs,esm --dts --clean",
+    "test": "tsx test.ts",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [],
   "author": "",
   "license": "Unlicense",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "tsup": "^8.5.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
