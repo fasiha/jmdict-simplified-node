@@ -2,6 +2,7 @@ import assert from "assert";
 import {
   get,
   setup,
+  findExact,
   readingBeginning,
   readingAnywhere,
   kanjiBeginning,
@@ -64,6 +65,23 @@ import type { Word } from "./interfaces";
 
   const gotKana = get(db, "ものがたり");
   assert(gotKana.length === 1);
+
+  {
+    // findExact: matches on kana or kanji text
+    const kanaHits = findExact(db, "ものがたり");
+    assert(kanaHits.length === 1);
+    assert(kanaHits[0].kana.some((k) => k.text === "ものがたり"));
+  }
+  {
+    const kanjiHits = findExact(db, "食べ物");
+    assert(kanjiHits.length === 1);
+    assert(kanjiHits[0].kanji.some((k) => k.text === "食べ物"));
+  }
+  {
+    const haHits = findExact(db, "は");
+    assert(haHits.length > 2);
+    console.log("findExact ok");
+  }
 
   {
     const words = get(db, "すっきり");

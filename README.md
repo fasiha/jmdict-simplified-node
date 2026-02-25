@@ -5,6 +5,7 @@
     - [Tutorial](#tutorial)
   - [API](#api)
     - [`setup(dbpath: string, filename = ''): Promise<SetupType>`](#setupdbpath-string-filename---promisesetuptype)
+    - [`findExact(db: Db, text: string, limit?: number, offset?: number): Word[]`](#findexactdb-db-text-string-limit-number-offset-number-word)
     - [`readingBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]`](#readingbeginningdb-db-prefix-string-limit-number-offset-number-word)
     - [`readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`](#readinganywhere-kanjibeginning-kanjianywhere)
     - [Fuzzy search](#fuzzy-search)
@@ -79,6 +80,17 @@ export type SetupType = {
 The `db` object is required by all lookup functions in this API, so hang on to this. The other fields are informational.
 
 If a proper SQLite database is not found in `dbpath`, this function will look at `filename` and parse the JSON in it. It takes ~60 seconds to take a 109 MB JSON file and create a 193 MB SQLite database on a 2020-vintage Mac laptop.
+
+### `findExact(db: Db, text: string, limit?: number, offset?: number): Word[]`
+Find all entries where any kanji or reading exactly matches `text`. Returns an array of `Word`s. Unlike the beginning/anywhere functions, this does not do a prefix or substring match: the entry's kanji or kana text must equal `text` in full.
+
+Because a single entry can match via either its kanji or its kana, callers that need to distinguish can filter the results themselves:
+```ts
+const wanted = "食べ物";
+const hits = findExact(db, wanted);
+const byKanji = hits.filter(w => w.kanji.some(k => k.text === wanted));
+const byKana  = hits.filter(w => w.kana.some(k  => k.text === wanted));
+```
 
 ### `readingBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]`
 Find all readings starting with a given `prefix`. Needs a `Db`-typed object, which was one of the things `setup` gave you. `limit` defaults to -1 (no limit) and offset to 0 (no offset).
@@ -157,6 +169,8 @@ for (let page = 0; page < NUM_PAGES; page++) {
 ### 2.1.0
 
 Search functions (`readingBeginning`, `readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`, `readingFuzzy`, `kanjiFuzzy`) no longer return duplicate entries for words. Works with pagination!
+
+Introduces a new function, `findExact` that finds entries matching the search text exactly. This will match both kanji and readings.
 
 ### 2.0.0
 

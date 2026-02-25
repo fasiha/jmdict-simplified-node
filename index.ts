@@ -289,6 +289,10 @@ export function idsToWords(db: Db, idxs: string[]): Word[] {
   return idxs.map((id) => idToWord(db, id));
 }
 
+export function findExact(db: Db, text: string, limit = -1, offset = 0) {
+  return get(db, text, { exact: true, limit, offset });
+}
+
 export function readingBeginning(
   db: Db,
   prefix: string,
