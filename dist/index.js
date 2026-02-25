@@ -150,6 +150,7 @@ function fts({
       ${ftsTable}.entry_id = entries.id
     WHERE
       ${ftsTable}.text MATCH ?
+    GROUP BY entries.id
     LIMIT ? OFFSET ?;
   `;
   const tokenized = fuzzy ? tokenize(text) : `"${tokenize(text)}"`;
@@ -169,6 +170,7 @@ function get(db, text, { exact = true, limit = -1, offset = 0 } = {}) {
       raws.entry_id = entries.id
     WHERE
       raws.text LIKE ?
+    GROUP BY entries.id
     LIMIT ? OFFSET ?;
   `;
   const search = exact ? text : `${text}%`;
@@ -206,6 +208,9 @@ function idToWord(db, id) {
 }
 function idsToWords(db, idxs) {
   return idxs.map((id) => idToWord(db, id));
+}
+function findExact(db, text, limit = -1, offset = 0) {
+  return get(db, text, { exact: true, limit, offset });
 }
 function readingBeginning(db, prefix, limit = -1, offset = 0) {
   return get(db, prefix, {
@@ -269,6 +274,7 @@ function getField(db, key) {
 }
 export {
   GlossType,
+  findExact,
   get,
   getField,
   getTags,

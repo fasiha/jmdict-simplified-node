@@ -77,6 +77,7 @@ interface GetExtra {
 declare function get(db: Database, text: string, { exact, limit, offset }?: GetExtra): Word[];
 declare function getXrefs(db: Database, xref: Xref): Word[];
 declare function idsToWords(db: Database, idxs: string[]): Word[];
+declare function findExact(db: Database, text: string, limit?: number, offset?: number): Word[];
 declare function readingBeginning(db: Database, prefix: string, limit?: number, offset?: number): Word[];
 declare function readingAnywhere(db: Database, text: string, limit?: number, offset?: number): Word[];
 declare const kanjiBeginning: typeof readingBeginning;
@@ -86,4 +87,4 @@ declare function kanjiFuzzy(db: Database, text: string, limit?: number, offset?:
 declare function getTags(db: Database): Simplified["tags"];
 declare function getField(db: Database, key: keyof Omit<Simplified, "words">): unknown;
 
-export { type Gloss, GlossType, type Kana, type Kanji, type Sense, type SetupType, type Simplified, type Source, type Tag, type Word, type Xref, get, getField, getTags, getXrefs, idsToWords, kanjiAnywhere, kanjiBeginning, kanjiFuzzy, readingAnywhere, readingBeginning, readingFuzzy, setup };
+export { type Gloss, GlossType, type Kana, type Kanji, type Sense, type SetupType, type Simplified, type Source, type Tag, type Word, type Xref, findExact, get, getField, getTags, getXrefs, idsToWords, kanjiAnywhere, kanjiBeginning, kanjiFuzzy, readingAnywhere, readingBeginning, readingFuzzy, setup };
