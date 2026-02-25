@@ -17,7 +17,7 @@ import type { Word } from "./interfaces";
   const { db, dictDate, version, tags } = await setup(
     DBNAME,
     // TODO: Download latest jmdict-eng JSON
-    "jmdict-eng-3.6.1.json"
+    "jmdict-eng-3.6.1.json",
   );
   assert(dictDate);
   assert(version);
@@ -73,6 +73,25 @@ import type { Word } from "./interfaces";
     assert(xrefs[0].id !== words[0].id);
   }
 
+  {
+    // no duplicates: entries with multiple matching readings must appear once
+    const hits = readingBeginning(db, "あいさつ");
+    const ids = hits.map((w) => w.id);
+    assert(
+      ids.length === new Set(ids).size,
+      `readingBeginning returned ${ids.length - new Set(ids).size} duplicate(s)`,
+    );
+  }
+  {
+    const hitsAny = readingAnywhere(db, "あいさつ");
+    const idsAny = hitsAny.map((w) => w.id);
+    assert(
+      idsAny.length === new Set(idsAny).size,
+      `readingAnywhere returned ${idsAny.length - new Set(idsAny).size} duplicate(s)`,
+    );
+    console.log("no duplicates: ok");
+  }
+
   const xrefs = [
     getXrefs(db, ["かも知れない", "かもしれない"]),
     getXrefs(db, ["おばあさん", 2]),
@@ -92,21 +111,29 @@ import type { Word } from "./interfaces";
     assert(bothPages.length === 10);
     assert(
       [...page1, ...page2].map((w) => w.id).join("/") ===
-        bothPages.map((w) => w.id).join("/")
+        bothPages.map((w) => w.id).join("/"),
     );
 
     const noResults = readingAnywhere(db, "卵焼きもち", -1, 10000);
     assert(noResults.length === 0);
   }
   {
-    // more pagination
-    const NUM_PAGES = 3;
-    const PAGE_SIZE = 10;
+    // more pagination: paginating through all results must equal the unpaginated query
+    const PAGE_SIZE = 3;
     const hits = [];
-    for (let page = 0; page < NUM_PAGES; page++) {
+    let pages = 0;
+    while (true) {
       const thisPage = readingBeginning(db, "あいさつ", PAGE_SIZE, hits.length);
       hits.push(...thisPage);
-      console.log(`Page ${page + 1}: total hits ${hits.length}`);
+      pages++;
+      if (thisPage.length < PAGE_SIZE || pages > 100) break;
     }
+    assert(pages >= 3, `expected a bunch of pages but got ${pages}`);
+    const all = readingBeginning(db, "あいさつ");
+    assert(
+      hits.length === all.length,
+      `paginated ${hits.length} !== unpaginated ${all.length}`,
+    );
+    console.log(`pagination ok: ${hits.length} hits, ${pages} pages`);
   }
 })();

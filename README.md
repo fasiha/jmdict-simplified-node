@@ -16,6 +16,7 @@
     - [`getXrefs(db: Db, xref: Xref): Word[]`](#getxrefsdb-db-xref-xref-word)
     - [Pagination](#pagination)
   - [Changelog](#changelog)
+    - [2.1.0](#210)
     - [2.0.0](#200)
     - [1.2.0](#120)
 
@@ -152,6 +153,10 @@ for (let page = 0; page < NUM_PAGES; page++) {
 ```
 
 ## Changelog
+
+### 2.1.0
+
+Search functions (`readingBeginning`, `readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`, `readingFuzzy`, `kanjiFuzzy`) no longer return duplicate entries for words. Works with pagination!
 
 ### 2.0.0
 

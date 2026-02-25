@@ -202,6 +202,7 @@ function fts({
       ${ftsTable}.entry_id = entries.id
     WHERE
       ${ftsTable}.text MATCH ?
+    GROUP BY entries.id
     LIMIT ? OFFSET ?;
   `;
 
@@ -236,6 +237,7 @@ export function get(
       raws.entry_id = entries.id
     WHERE
       raws.text LIKE ?
+    GROUP BY entries.id
     LIMIT ? OFFSET ?;
   `;
   const search = exact ? text : `${text}%`;
