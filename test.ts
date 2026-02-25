@@ -27,7 +27,10 @@ import type { Word } from "./interfaces";
     word.kanji
       .map((k) => k.text)
       .concat(word.kana.map((k) => k.text))
-      .join(", ");
+      .join(", ") +
+    ` ${word.sense
+      .map((s) => s.gloss.map((g) => g.text).join("; "))
+      .join(" / ")} (#${word.id})`;
   const summarizeAll = (words: Word[]) => words.map(summarize).join("\n");
 
   const kanaBeg = readingBeginning(db, "いい"); // それ
