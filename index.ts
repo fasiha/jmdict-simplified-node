@@ -30,7 +30,7 @@ function statements(db: Db): Statements {
     const ftsString = `SELECT entries.entry_json FROM {{template}}
            JOIN entries ON {{template}}.entry_id = entries.id
            WHERE {{template}}.text MATCH ?
-           GROUP BY entries.id LIMIT ? OFFSET ?`
+           GROUP BY entries.id LIMIT ? OFFSET ?`;
 
     hit = {
       get: db
@@ -51,9 +51,7 @@ function statements(db: Db): Statements {
       ftsKanjis: db
         .prepare(ftsString.replace(/{{template}}/g, "kanjis"))
         .pluck(),
-      ftsKanas: db
-        .prepare(ftsString.replace(/{{template}}/g, "kanas"))
-        .pluck(),
+      ftsKanas: db.prepare(ftsString.replace(/{{template}}/g, "kanas")).pluck(),
       idToWord: db
         .prepare(`SELECT entry_json FROM entries WHERE id = ?`)
         .pluck(),
@@ -140,7 +138,7 @@ export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
     // filename provided?
     if (!filename) {
       console.error(
-        "database not found but cannot create it if no `filename` given"
+        "database not found but cannot create it if no `filename` given",
       );
       process.exit(1);
     }
@@ -151,7 +149,7 @@ export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
       contents = await pfs.readFile(filename, "utf8");
     } catch {
       console.error(
-        `Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`
+        `Unable to find ${filename}, download it from https://github.com/scriptin/jmdict-simplified`,
       );
       process.exit(1);
     }
@@ -161,26 +159,26 @@ export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
   })();
 
   const insertMeta = db.prepare(
-    "INSERT INTO metadata (key, value_json) VALUES (?, ?)"
+    "INSERT INTO metadata (key, value_json) VALUES (?, ?)",
   );
   const insertEntry = db.prepare(
-    "INSERT INTO entries (id, entry_json) VALUES (?, ?)"
+    "INSERT INTO entries (id, entry_json) VALUES (?, ?)",
   );
   const insertKanji = db.prepare(
-    "INSERT INTO kanjis (entry_id, text) VALUES (?, ?)"
+    "INSERT INTO kanjis (entry_id, text) VALUES (?, ?)",
   );
   const insertKana = db.prepare(
-    "INSERT INTO kanas (entry_id, text) VALUES (?, ?)"
+    "INSERT INTO kanas (entry_id, text) VALUES (?, ?)",
   );
   const insertRaw = db.prepare(
-    "INSERT INTO raws (entry_id, text) VALUES (?, ?)"
+    "INSERT INTO raws (entry_id, text) VALUES (?, ?)",
   );
 
   for (const key in data) {
     if (key !== "words") {
       insertMeta.run(
         key,
-        JSON.stringify((data as unknown as Record<string, unknown>)[key])
+        JSON.stringify((data as unknown as Record<string, unknown>)[key]),
       );
     }
   }
@@ -246,9 +244,7 @@ function fts({
     return get(db, `${text}%`, { exact: false, limit, offset });
   }
 
-  const ftsStmt = kanji
-    ? statements(db).ftsKanjis
-    : statements(db).ftsKanas;
+  const ftsStmt = kanji ? statements(db).ftsKanjis : statements(db).ftsKanas;
 
   const tokenized = fuzzy ? tokenize(text) : `"${tokenize(text)}"`;
   const token = beginning ? `^${tokenized}*` : tokenized;
@@ -268,7 +264,7 @@ interface GetExtra {
 export function get(
   db: Db,
   text: string,
-  { exact = true, limit = -1, offset = 0 }: GetExtra = {}
+  { exact = true, limit = -1, offset = 0 }: GetExtra = {},
 ): Word[] {
   const search = exact ? text : `${text}%`;
   const rows = statements(db).get.all(search, limit, offset) as string[];
@@ -285,7 +281,7 @@ export function getXrefs(db: Db, xref: Xref): Word[] {
     const keb = first;
     const kebHits = get(db, keb);
     const rebMatches = kebHits.filter((w) =>
-      w.kana.some((k) => k.text === reb)
+      w.kana.some((k) => k.text === reb),
     );
     return rebMatches;
   } else {
@@ -327,7 +323,7 @@ export function readingBeginning(
   db: Db,
   prefix: string,
   limit = -1,
-  offset = 0
+  offset = 0,
 ) {
   return get(db, prefix, {
     exact: false,
@@ -388,7 +384,7 @@ export function getTags(db: Db): Simplified["tags"] {
 
 export function getField(
   db: Db,
-  key: keyof Omit<Simplified, "words">
+  key: keyof Omit<Simplified, "words">,
 ): unknown {
   const row = statements(db).getField.get(key) as string;
   return JSON.parse(row);
