@@ -3,6 +3,7 @@ import {
   get,
   setup,
   findExact,
+  countExact,
   readingBeginning,
   readingAnywhere,
   kanjiBeginning,
@@ -81,6 +82,29 @@ import type { Word } from "./interfaces";
     const haHits = findExact(db, "は");
     assert(haHits.length > 2);
     console.log("findExact ok");
+  }
+
+  {
+    // countExact: result is always a number
+    const zeroCount = countExact(db, "dummy text");
+    assert(zeroCount === 0);
+
+    // countExact matches findExact's length for kana
+    const kanaCount = countExact(db, "ものがたり");
+    assert(kanaCount === findExact(db, "ものがたり").length);
+    assert(kanaCount > 0);
+
+    // countExact matches findExact's length for kanji
+    const kanjiCount = countExact(db, "食べ物");
+    assert(kanjiCount === findExact(db, "食べ物").length);
+    assert(kanjiCount > 0);
+
+    // countExact matches findExact's length for multi-result query
+    const haCount = countExact(db, "は");
+    assert(haCount === findExact(db, "は").length);
+    assert(haCount > 1);
+
+    console.log("countExact ok");
   }
 
   {

@@ -6,6 +6,7 @@
   - [API](#api)
     - [`setup(dbpath: string, filename = ''): Promise<SetupType>`](#setupdbpath-string-filename---promisesetuptype)
     - [`findExact(db: Db, text: string, limit?: number, offset?: number): Word[]`](#findexactdb-db-text-string-limit-number-offset-number-word)
+    - [`countExact(db: Db, text: string): number`](#countexactdb-db-text-string-number)
     - [`readingBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]`](#readingbeginningdb-db-prefix-string-limit-number-offset-number-word)
     - [`readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`](#readinganywhere-kanjibeginning-kanjianywhere)
     - [Fuzzy search](#fuzzy-search)
@@ -92,6 +93,15 @@ const byKanji = hits.filter(w => w.kanji.some(k => k.text === wanted));
 const byKana  = hits.filter(w => w.kana.some(k  => k.text === wanted));
 ```
 
+### `countExact(db: Db, text: string): number`
+Like `findExact` but returns only the count of matching entries rather than the entries themselves. Useful when you need to know whether a term exists in the dictionary, or how many entries match, without paying the cost of deserializing every matching `Word` from JSON.
+
+```ts
+const n = countExact(db, "食べ物"); // 1
+const m = countExact(db, "は");     // > 2
+const z = countExact(db, "dummy text"); // 0
+```
+
 ### `readingBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]`
 Find all readings starting with a given `prefix`. Needs a `Db`-typed object, which was one of the things `setup` gave you. `limit` defaults to -1 (no limit) and offset to 0 (no offset).
 
@@ -170,7 +180,9 @@ for (let page = 0; page < NUM_PAGES; page++) {
 
 Search functions (`readingBeginning`, `readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`, `readingFuzzy`, `kanjiFuzzy`) no longer return duplicate entries for words. Works with pagination!
 
-Introduces a new function, `findExact` that finds entries matching the search text exactly. This will match both kanji and readings.
+Introduces two new functions:
+- `findExact` finds entries matching the search text exactly (both kanji and readings).
+- `countExact` returns the count of entries that `findExact` would return, without deserializing the results.
 
 ### 2.0.0
 

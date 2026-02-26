@@ -293,6 +293,19 @@ export function findExact(db: Db, text: string, limit = -1, offset = 0) {
   return get(db, text, { exact: true, limit, offset });
 }
 
+export function countExact(db: Db, text: string): number {
+  const query = `
+    SELECT COUNT(*) FROM (
+      SELECT entries.id
+      FROM raws
+      JOIN entries ON raws.entry_id = entries.id
+      WHERE raws.text = ?
+      GROUP BY entries.id
+    )
+  `;
+  return db.prepare(query).pluck().get(text) as number;
+}
+
 export function readingBeginning(
   db: Db,
   prefix: string,
