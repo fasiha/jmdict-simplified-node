@@ -16,6 +16,7 @@ const tokenize = (s: string) => s.split("").join(" ");
 type Statements = Record<
   | "get"
   | "countExact"
+  | "findExactIds"
   | "ftsKanjis"
   | "ftsKanas"
   | "idToWord"
@@ -44,6 +45,14 @@ function statements(db: Db): Statements {
       countExact: db
         .prepare(
           `SELECT COUNT(DISTINCT entries.id) FROM raws
+            JOIN entries ON raws.entry_id = entries.id
+            WHERE raws.text = ?`,
+        )
+        .pluck(),
+      findExactIds: db
+        .prepare(
+          // Same as above without the COUNT.
+          `SELECT DISTINCT entries.id FROM raws
             JOIN entries ON raws.entry_id = entries.id
             WHERE raws.text = ?`,
         )
@@ -317,6 +326,10 @@ export function findExact(db: Db, text: string, limit = -1, offset = 0) {
 
 export function countExact(db: Db, text: string): number {
   return statements(db).countExact.get(text) as number;
+}
+
+export function findExactIds(db: Db, text: string): string[] {
+  return statements(db).findExactIds.all(text) as string[];
 }
 
 export function readingBeginning(

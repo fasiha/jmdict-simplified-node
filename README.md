@@ -7,6 +7,7 @@
     - [`setup(dbpath: string, filename = ''): Promise<SetupType>`](#setupdbpath-string-filename---promisesetuptype)
     - [`findExact(db: Db, text: string, limit?: number, offset?: number): Word[]`](#findexactdb-db-text-string-limit-number-offset-number-word)
     - [`countExact(db: Db, text: string): number`](#countexactdb-db-text-string-number)
+    - [`findExactIds(db: Db, text: string): string[]`](#findexactidsdb-db-text-string-string)
     - [`readingBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]`](#readingbeginningdb-db-prefix-string-limit-number-offset-number-word)
     - [`readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`](#readinganywhere-kanjibeginning-kanjianywhere)
     - [Fuzzy search](#fuzzy-search)
@@ -102,6 +103,10 @@ const m = countExact(db, "は");     // > 2
 const z = countExact(db, "dummy text"); // 0
 ```
 
+### `findExactIds(db: Db, text: string): string[]`
+Like `findExact` but returns only the IDs of matching entries rather than the full `Word` objects. Useful when you need the IDs for further processing (e.g., passing to `idsToWords`) without paying the cost of deserializing every matching `Word` from JSON.
+
+
 ### `readingBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]`
 Find all readings starting with a given `prefix`. Needs a `Db`-typed object, which was one of the things `setup` gave you. `limit` defaults to -1 (no limit) and offset to 0 (no offset).
 
@@ -180,9 +185,10 @@ for (let page = 0; page < NUM_PAGES; page++) {
 
 Search functions (`readingBeginning`, `readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`, `readingFuzzy`, `kanjiFuzzy`) no longer return duplicate entries for words. Works with pagination!
 
-Introduces two new functions:
+Introduces several new functions:
 - `findExact` finds entries matching the search text exactly (both kanji and readings).
 - `countExact` returns the count of entries that `findExact` would return, without deserializing the results.
+- `findExactIds` returns the IDs of entries that `findExact` would return, without deserializing the results.
 
 ### 2.0.0
 

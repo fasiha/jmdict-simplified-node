@@ -33,6 +33,7 @@ __export(index_exports, {
   GlossType: () => GlossType,
   countExact: () => countExact,
   findExact: () => findExact,
+  findExactIds: () => findExactIds,
   get: () => get,
   getField: () => getField,
   getTags: () => getTags,
@@ -77,6 +78,12 @@ function statements(db) {
       ).pluck(),
       countExact: db.prepare(
         `SELECT COUNT(DISTINCT entries.id) FROM raws
+            JOIN entries ON raws.entry_id = entries.id
+            WHERE raws.text = ?`
+      ).pluck(),
+      findExactIds: db.prepare(
+        // Same as above without the COUNT.
+        `SELECT DISTINCT entries.id FROM raws
             JOIN entries ON raws.entry_id = entries.id
             WHERE raws.text = ?`
       ).pluck(),
@@ -264,6 +271,9 @@ function findExact(db, text, limit = -1, offset = 0) {
 function countExact(db, text) {
   return statements(db).countExact.get(text);
 }
+function findExactIds(db, text) {
+  return statements(db).findExactIds.all(text);
+}
 function readingBeginning(db, prefix, limit = -1, offset = 0) {
   return get(db, prefix, {
     exact: false,
@@ -327,6 +337,7 @@ function getField(db, key) {
   GlossType,
   countExact,
   findExact,
+  findExactIds,
   get,
   getField,
   getTags,

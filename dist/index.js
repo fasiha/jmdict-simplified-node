@@ -32,6 +32,12 @@ function statements(db) {
             JOIN entries ON raws.entry_id = entries.id
             WHERE raws.text = ?`
       ).pluck(),
+      findExactIds: db.prepare(
+        // Same as above without the COUNT.
+        `SELECT DISTINCT entries.id FROM raws
+            JOIN entries ON raws.entry_id = entries.id
+            WHERE raws.text = ?`
+      ).pluck(),
       ftsKanjis: db.prepare(ftsString.replace(/{{template}}/g, "kanjis")).pluck(),
       ftsKanas: db.prepare(ftsString.replace(/{{template}}/g, "kanas")).pluck(),
       idToWord: db.prepare(`SELECT entry_json FROM entries WHERE id = ?`).pluck(),
@@ -216,6 +222,9 @@ function findExact(db, text, limit = -1, offset = 0) {
 function countExact(db, text) {
   return statements(db).countExact.get(text);
 }
+function findExactIds(db, text) {
+  return statements(db).findExactIds.all(text);
+}
 function readingBeginning(db, prefix, limit = -1, offset = 0) {
   return get(db, prefix, {
     exact: false,
@@ -278,6 +287,7 @@ export {
   GlossType,
   countExact,
   findExact,
+  findExactIds,
   get,
   getField,
   getTags,

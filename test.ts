@@ -4,6 +4,7 @@ import {
   setup,
   findExact,
   countExact,
+  findExactIds,
   readingBeginning,
   readingAnywhere,
   kanjiBeginning,
@@ -105,6 +106,29 @@ import type { Word } from "./interfaces";
     assert(haCount > 1);
 
     console.log("countExact ok");
+  }
+
+  {
+    const arrEq = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((x, i) => x === b[i]);
+    const ids = (words: Word[]) => words.map((w) => w.id);
+
+    // findExactIds: returns string IDs, same count as findExact
+    const zeroIds = findExactIds(db, "dummy text");
+    assert(zeroIds.length === 0);
+
+    const kanaIds = findExactIds(db, "ものがたり");
+    assert(arrEq(kanaIds, ids(findExact(db, "ものがたり"))));
+    assert(kanaIds.every((id) => typeof id === "string"));
+
+    const kanjiIds = findExactIds(db, "食べ物");
+    assert(arrEq(kanjiIds, ids(findExact(db, "食べ物"))));
+
+    const haIds = findExactIds(db, "は");
+    assert(arrEq(haIds, ids(findExact(db, "は"))));
+    assert(haIds.length > 2);
+
+    console.log("findExactIds ok");
   }
 
   {
