@@ -1,4 +1,4 @@
-import Sqlite, { type Database as Db } from "better-sqlite3";
+import Sqlite, { type Database as Db, type Statement } from "better-sqlite3";
 import { promises as pfs } from "fs";
 
 import type { Simplified, Word, Xref } from "./interfaces";
@@ -12,6 +12,62 @@ export type SetupType = {
 };
 
 const tokenize = (s: string) => s.split("").join(" ");
+
+type Statements = Record<
+  | "get"
+  | "countExact"
+  | "ftsKanjis"
+  | "ftsKanas"
+  | "idToWord"
+  | "getTags"
+  | "getField",
+  Statement
+>;
+const allStatements = new WeakMap<Db, Statements>();
+function statements(db: Db): Statements {
+  let hit = allStatements.get(db);
+  if (!hit) {
+    const ftsString = `SELECT entries.entry_json FROM {{template}}
+           JOIN entries ON {{template}}.entry_id = entries.id
+           WHERE {{template}}.text MATCH ?
+           GROUP BY entries.id LIMIT ? OFFSET ?`
+
+    hit = {
+      get: db
+        .prepare(
+          `SELECT entries.entry_json FROM raws
+           JOIN entries ON raws.entry_id = entries.id
+           WHERE raws.text LIKE ?
+           GROUP BY entries.id LIMIT ? OFFSET ?`,
+        )
+        .pluck(),
+      countExact: db
+        .prepare(
+          `SELECT COUNT(DISTINCT entries.id) FROM raws
+            JOIN entries ON raws.entry_id = entries.id
+            WHERE raws.text = ?`,
+        )
+        .pluck(),
+      ftsKanjis: db
+        .prepare(ftsString.replace(/{{template}}/g, "kanjis"))
+        .pluck(),
+      ftsKanas: db
+        .prepare(ftsString.replace(/{{template}}/g, "kanas"))
+        .pluck(),
+      idToWord: db
+        .prepare(`SELECT entry_json FROM entries WHERE id = ?`)
+        .pluck(),
+      getTags: db
+        .prepare(`SELECT value_json FROM metadata WHERE key = 'tags'`)
+        .pluck(),
+      getField: db
+        .prepare(`SELECT value_json FROM metadata WHERE key = ?`)
+        .pluck(),
+    };
+    allStatements.set(db, hit);
+  }
+  return hit;
+}
 
 export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
   const db = new Sqlite(dbpath);
@@ -190,25 +246,13 @@ function fts({
     return get(db, `${text}%`, { exact: false, limit, offset });
   }
 
-  const ftsTable = kanji ? "kanjis" : "kanas";
-  const query = `
-    SELECT
-      entries.entry_json
-    FROM
-      ${ftsTable}
-    JOIN
-      entries
-    ON
-      ${ftsTable}.entry_id = entries.id
-    WHERE
-      ${ftsTable}.text MATCH ?
-    GROUP BY entries.id
-    LIMIT ? OFFSET ?;
-  `;
+  const ftsStmt = kanji
+    ? statements(db).ftsKanjis
+    : statements(db).ftsKanas;
 
   const tokenized = fuzzy ? tokenize(text) : `"${tokenize(text)}"`;
   const token = beginning ? `^${tokenized}*` : tokenized;
-  const raws = db.prepare(query).pluck().all(token, limit, offset) as string[];
+  const raws = ftsStmt.all(token, limit, offset) as string[];
   return raws.map((r) => JSON.parse(r) as Word);
 }
 
@@ -226,25 +270,8 @@ export function get(
   text: string,
   { exact = true, limit = -1, offset = 0 }: GetExtra = {}
 ): Word[] {
-  const GET_QUERY = `
-    SELECT
-      entries.entry_json
-    FROM
-      raws
-    JOIN
-      entries
-    ON
-      raws.entry_id = entries.id
-    WHERE
-      raws.text LIKE ?
-    GROUP BY entries.id
-    LIMIT ? OFFSET ?;
-  `;
   const search = exact ? text : `${text}%`;
-  const rows = db
-    .prepare(GET_QUERY)
-    .pluck()
-    .all(search, limit, offset) as string[];
+  const rows = statements(db).get.all(search, limit, offset) as string[];
   return rows.map((r) => JSON.parse(r) as Word);
 }
 
@@ -280,8 +307,7 @@ export function getXrefs(db: Db, xref: Xref): Word[] {
 }
 
 function idToWord(db: Db, id: string): Word {
-  const query = `SELECT entry_json FROM entries WHERE id = ?`;
-  const row = db.prepare(query).pluck().get(id) as string;
+  const row = statements(db).idToWord.get(id) as string;
   return JSON.parse(row) as Word;
 }
 
@@ -294,16 +320,7 @@ export function findExact(db: Db, text: string, limit = -1, offset = 0) {
 }
 
 export function countExact(db: Db, text: string): number {
-  const query = `
-    SELECT COUNT(*) FROM (
-      SELECT entries.id
-      FROM raws
-      JOIN entries ON raws.entry_id = entries.id
-      WHERE raws.text = ?
-      GROUP BY entries.id
-    )
-  `;
-  return db.prepare(query).pluck().get(text) as number;
+  return statements(db).countExact.get(text) as number;
 }
 
 export function readingBeginning(
@@ -365,8 +382,7 @@ export function kanjiFuzzy(db: Db, text: string, limit = -1, offset = 0) {
 }
 
 export function getTags(db: Db): Simplified["tags"] {
-  const query = `SELECT value_json FROM metadata WHERE key = 'tags'`;
-  const row = db.prepare(query).pluck().get() as string;
+  const row = statements(db).getTags.get() as string;
   return JSON.parse(row) as Simplified["tags"];
 }
 
@@ -374,7 +390,6 @@ export function getField(
   db: Db,
   key: keyof Omit<Simplified, "words">
 ): unknown {
-  const query = `SELECT value_json FROM metadata WHERE key = ?`;
-  const row = db.prepare(query).pluck().get(key) as string;
+  const row = statements(db).getField.get(key) as string;
   return JSON.parse(row);
 }
