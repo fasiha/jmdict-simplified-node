@@ -31,6 +31,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   GlossType: () => GlossType,
+  countExact: () => countExact,
   findExact: () => findExact,
   get: () => get,
   getField: () => getField,
@@ -59,6 +60,36 @@ var GlossType = /* @__PURE__ */ ((GlossType2) => {
 
 // index.ts
 var tokenize = (s) => s.split("").join(" ");
+var allStatements = /* @__PURE__ */ new WeakMap();
+function statements(db) {
+  let hit = allStatements.get(db);
+  if (!hit) {
+    const ftsString = `SELECT entries.entry_json FROM {{template}}
+           JOIN entries ON {{template}}.entry_id = entries.id
+           WHERE {{template}}.text MATCH ?
+           GROUP BY entries.id LIMIT ? OFFSET ?`;
+    hit = {
+      get: db.prepare(
+        `SELECT entries.entry_json FROM raws
+           JOIN entries ON raws.entry_id = entries.id
+           WHERE raws.text LIKE ?
+           GROUP BY entries.id LIMIT ? OFFSET ?`
+      ).pluck(),
+      countExact: db.prepare(
+        `SELECT COUNT(DISTINCT entries.id) FROM raws
+            JOIN entries ON raws.entry_id = entries.id
+            WHERE raws.text = ?`
+      ).pluck(),
+      ftsKanjis: db.prepare(ftsString.replace(/{{template}}/g, "kanjis")).pluck(),
+      ftsKanas: db.prepare(ftsString.replace(/{{template}}/g, "kanas")).pluck(),
+      idToWord: db.prepare(`SELECT entry_json FROM entries WHERE id = ?`).pluck(),
+      getTags: db.prepare(`SELECT value_json FROM metadata WHERE key = 'tags'`).pluck(),
+      getField: db.prepare(`SELECT value_json FROM metadata WHERE key = ?`).pluck()
+    };
+    allStatements.set(db, hit);
+  }
+  return hit;
+}
 async function setup(dbpath, filename = "") {
   const db = new import_better_sqlite3.default(dbpath);
   db.pragma("journal_mode = WAL");
@@ -185,43 +216,15 @@ function fts({
   if (beginning && !fuzzy) {
     return get(db, `${text}%`, { exact: false, limit, offset });
   }
-  const ftsTable = kanji ? "kanjis" : "kanas";
-  const query = `
-    SELECT
-      entries.entry_json
-    FROM
-      ${ftsTable}
-    JOIN
-      entries
-    ON
-      ${ftsTable}.entry_id = entries.id
-    WHERE
-      ${ftsTable}.text MATCH ?
-    GROUP BY entries.id
-    LIMIT ? OFFSET ?;
-  `;
+  const ftsStmt = kanji ? statements(db).ftsKanjis : statements(db).ftsKanas;
   const tokenized = fuzzy ? tokenize(text) : `"${tokenize(text)}"`;
   const token = beginning ? `^${tokenized}*` : tokenized;
-  const raws = db.prepare(query).pluck().all(token, limit, offset);
+  const raws = ftsStmt.all(token, limit, offset);
   return raws.map((r) => JSON.parse(r));
 }
 function get(db, text, { exact = true, limit = -1, offset = 0 } = {}) {
-  const GET_QUERY = `
-    SELECT
-      entries.entry_json
-    FROM
-      raws
-    JOIN
-      entries
-    ON
-      raws.entry_id = entries.id
-    WHERE
-      raws.text LIKE ?
-    GROUP BY entries.id
-    LIMIT ? OFFSET ?;
-  `;
   const search = exact ? text : `${text}%`;
-  const rows = db.prepare(GET_QUERY).pluck().all(search, limit, offset);
+  const rows = statements(db).get.all(search, limit, offset);
   return rows.map((r) => JSON.parse(r));
 }
 function getXrefs(db, xref) {
@@ -249,8 +252,7 @@ function getXrefs(db, xref) {
   }
 }
 function idToWord(db, id) {
-  const query = `SELECT entry_json FROM entries WHERE id = ?`;
-  const row = db.prepare(query).pluck().get(id);
+  const row = statements(db).idToWord.get(id);
   return JSON.parse(row);
 }
 function idsToWords(db, idxs) {
@@ -258,6 +260,9 @@ function idsToWords(db, idxs) {
 }
 function findExact(db, text, limit = -1, offset = 0) {
   return get(db, text, { exact: true, limit, offset });
+}
+function countExact(db, text) {
+  return statements(db).countExact.get(text);
 }
 function readingBeginning(db, prefix, limit = -1, offset = 0) {
   return get(db, prefix, {
@@ -310,18 +315,17 @@ function kanjiFuzzy(db, text, limit = -1, offset = 0) {
   });
 }
 function getTags(db) {
-  const query = `SELECT value_json FROM metadata WHERE key = 'tags'`;
-  const row = db.prepare(query).pluck().get();
+  const row = statements(db).getTags.get();
   return JSON.parse(row);
 }
 function getField(db, key) {
-  const query = `SELECT value_json FROM metadata WHERE key = ?`;
-  const row = db.prepare(query).pluck().get(key);
+  const row = statements(db).getField.get(key);
   return JSON.parse(row);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   GlossType,
+  countExact,
   findExact,
   get,
   getField,
