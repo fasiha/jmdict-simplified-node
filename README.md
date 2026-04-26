@@ -118,14 +118,16 @@ Returns an array of `Word`s. A `Word` is an entry in JMDict, and contains things
 
 Look at [`interfaces.ts`](./interfaces.ts) for the details. It very carefully follows the soft-schema of the [upstream `jmdict-simplified`](https://github.com/scriptin/jmdict-simplified) project.
 
-### `readingAnywhere`, `kanjiBeginning`, `kanjiAnywhere`
+### `kanjiBeginning`, `readingAnywhere`, `kanjiAnywhere`
 These three have the same signature as `readingBeginning` above:
 ```ts
-readingAnywhere(db: Db, text: string, limit?: number, offset?: number): Word[]
 kanjiBeginning(db: Db, prefix: string, limit?: number, offset?: number): Word[]
+readingAnywhere(db: Db, text: string, limit?: number, offset?: number): Word[]
 kanjiAnywhere(db: Db, text: string, limit?: number, offset?: number): Word[]
 ```
-They search the reading or kanji (text) fields, either via a prefix (to match the beginning) or by anywhere in the string. Both beginning and anywhere are fast: the former uses an index on each kanji and reading string (as fast as possible), while the anywhere case uses SQLite's FTS5 full-text search (tokenized as one characer per token; this is a bit more work than the prefix search but still very fast).
+They search the reading or kanji (text) fields, either via a prefix (to match the beginning) or by anywhere in the string. Both beginning and anywhere are fast: the former uses an index on each kanji and reading string (as fast as possible), while the anywhere case uses SQLite's FTS5 full-text search (tokenized as one character per token; this is a bit more work than the prefix search but still very fast).
+
+`kanjiBeginning` only searches kanji (text) forms, just as `readingBeginning` only searches kana (reading) forms. Entries that have no kanji forms — words written entirely in kana — will never appear in `kanjiBeginning` results. This is expected: those entries have nothing to match against a kanji prefix.
 
 ### Fuzzy search
 Fuzzy search allows you to find entries where all characters in your search term appear at least once. The characters may be found in any order: searching for "悪い" gives you the exact same results as "い悪".
@@ -179,7 +181,27 @@ for (let page = 0; page < NUM_PAGES; page++) {
 }
 ```
 
+## Upgrading from 1.x to 2.x
+
+The 2.0 release replaces LevelDB with SQLite. Here is everything you need to know before upgrading:
+
+**Delete your old database and expect a larger one.** The LevelDB directory (whatever path you passed as `dbpath`) is no longer used. Delete it and let `setup` rebuild from the JSON file. The new SQLite database will be a single `.db` file — expect it to be roughly 40% larger than the old LevelDB directory. The extra space pays for structured storage plus FTS5 full-text search indexes, and you get a single portable file instead of a directory full of LevelDB segments. The initial build is also faster as a bonus: about 7 seconds versus 27 seconds for LevelDB on the same machine.
+
+**Search functions are now synchronous.** Every function except `setup` is synchronous — no more `await` on `readingBeginning`, `findExact`, etc. `setup` itself is still `async` because it may need to read the JSON file from disk. You may be able to remove `await` keywords throughout your code.
+
+**`setup` accepts fewer arguments.** The old `verbose` and `omitPartial` parameters are gone. Setup is always quiet, and anywhere/fuzzy search is always included — there is no longer an option to skip it.
+
+**`kanjiBeginning` now searches only kanji forms.** In earlier 2.x releases this function was identical to `readingBeginning` and searched both kanji and kana. It now correctly searches only kanji (text) forms, matching `kanjiAnywhere` and `kanjiFuzzy`. If your code relied on `kanjiBeginning` matching kana-only entries, switch those calls to `readingBeginning`.
+
 ## Changelog
+
+### 2.2.0
+
+- **`kanjiBeginning` now correctly searches only kanji forms**, symmetric with `kanjiAnywhere` and `kanjiFuzzy`. Previously it was an alias for `readingBeginning` and searched both kanji and kana. Kana-only entries will not appear in `kanjiBeginning` results (see the upgrade guide above).
+- **`setup` now builds the database inside a single transaction**, making the initial build significantly faster (previously each row was committed individually).
+- **Added a composite index on `raws(is_kanji, text)`** for `readingBeginning` and `kanjiBeginning` prefix scans, and a plain index on `raws(text)` for `findExact`, `countExact`, and `findExactIds`.
+- Fixed `getXrefs` calling the same lookup twice when resolving a plain kana/kanji reference.
+- Fixed a potential `SyntaxError` swallow on missing metadata keys during `setup`.
 
 ### 2.1.0
 
@@ -202,10 +224,6 @@ The SQLite substrate allows
 Also included: offsets (allowing pagination, along with `limit`).
 
 All the search functions are synchronous thanks to Better-SQLite3. Only `setup` is async (since it might need to read a file).
-
-Upgrade: the API is mostly backwards-compatible so most users can upgrade without any work. Breaking changes are solely in `setup`:
-- `setup` accepts fewer arguments (no more `verbose`, `omitPartial`: setup is always quiet and will always set up partial/anywhere searches).
-- If you called `setup` with an empty filename because you assumed the database was already setup, of course you'll need to rerun whatever code you initially ran to create the database.
 
 Small caveat: since the search functions are no longer async, you might be able to simplify your code to avoid needless `await`s.
 

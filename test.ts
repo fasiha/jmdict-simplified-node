@@ -54,6 +54,43 @@ import type { Word } from "./interfaces";
   assert(kanjiAny.length > kanjiBeg.length);
   assert(kanjiAny.every((r) => r.kanji.some((k) => k.text.includes("中人"))));
 
+  {
+    // kanjiBeginning and readingBeginning must each match only their own field type.
+    // "食べ物" is a kanji form whose reading is "たべもの".
+
+    // every kanjiBeginning result must have a kanji form starting with the prefix
+    const kanjiHits = kanjiBeginning(db, "食べ");
+    assert(
+      kanjiHits.length > 0,
+      "kanjiBeginning should find entries whose kanji starts with 食べ",
+    );
+    assert(
+      kanjiHits.every((r) => r.kanji.some((k) => k.text.startsWith("食べ"))),
+      "kanjiBeginning results must have a kanji form starting with the prefix",
+    );
+
+    // every readingBeginning result must have a kana form starting with the prefix
+    const kanaHits = readingBeginning(db, "たべ");
+    assert(
+      kanaHits.length > 0,
+      "readingBeginning should find entries whose reading starts with たべ",
+    );
+    assert(
+      kanaHits.every((r) => r.kana.some((k) => k.text.startsWith("たべ"))),
+      "readingBeginning results must have a reading starting with the prefix",
+    );
+
+    // "食べ" contains kanji, so no kana reading starts with it —
+    // readingBeginning must return nothing
+    const kanaOnKanji = readingBeginning(db, "食べ");
+    assert(
+      kanaOnKanji.length === 0,
+      "readingBeginning must return nothing for a prefix containing kanji",
+    );
+
+    console.log("kanjiBeginning/readingBeginning separation: ok");
+  }
+
   const kanjiFuzz = kanjiFuzzy(db, "中人");
   assert(kanjiFuzz.length > kanjiAny.length);
   console.log(`${kanjiFuzz.length} fuzzy found: kanji`);

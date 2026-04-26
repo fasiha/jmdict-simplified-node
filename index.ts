@@ -15,6 +15,8 @@ const tokenize = (s: string) => s.split("").join(" ");
 
 type Statements = Record<
   | "get"
+  | "getKanji"
+  | "getKana"
   | "countExact"
   | "findExactIds"
   | "ftsKanjis"
@@ -33,6 +35,16 @@ function statements(db: Db): Statements {
            WHERE {{template}}.text MATCH ?
            GROUP BY entries.id LIMIT ? OFFSET ?`;
 
+    const prefixByKind = (isKanji: 0 | 1) =>
+      db
+        .prepare(
+          `SELECT entries.entry_json FROM raws
+           JOIN entries ON raws.entry_id = entries.id
+           WHERE raws.is_kanji = ${isKanji} AND raws.text LIKE ?
+           GROUP BY entries.id LIMIT ? OFFSET ?`,
+        )
+        .pluck();
+
     hit = {
       get: db
         .prepare(
@@ -42,6 +54,8 @@ function statements(db: Db): Statements {
            GROUP BY entries.id LIMIT ? OFFSET ?`,
         )
         .pluck(),
+      getKanji: prefixByKind(1),
+      getKana: prefixByKind(0),
       countExact: db
         .prepare(
           `SELECT COUNT(DISTINCT entries.id) FROM raws
@@ -91,7 +105,7 @@ export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
   const getMetaStmt = db
     .prepare("SELECT value_json FROM metadata WHERE key = ?")
     .pluck();
-  const get = (s: string) => JSON.parse(getMetaStmt.get(s) as string);
+  const get = (s: string) => JSON.parse((getMetaStmt.get(s) ?? "") as string);
   try {
     return {
       db,
@@ -136,8 +150,11 @@ export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
   CREATE TABLE IF NOT EXISTS raws (
     text TEXT NOT NULL,
     entry_id TEXT NOT NULL,
+    is_kanji INTEGER NOT NULL,
     UNIQUE(text, entry_id)
   );
+  CREATE INDEX IF NOT EXISTS raws_is_kanji_text ON raws(is_kanji, text);
+  CREATE INDEX IF NOT EXISTS raws_text ON raws(text);
 `);
 
   const data: Simplified = await (async () => {
@@ -180,31 +197,33 @@ export async function setup(dbpath: string, filename = ""): Promise<SetupType> {
     "INSERT INTO kanas (entry_id, text) VALUES (?, ?)",
   );
   const insertRaw = db.prepare(
-    "INSERT INTO raws (entry_id, text) VALUES (?, ?)",
+    "INSERT INTO raws (entry_id, text, is_kanji) VALUES (?, ?, ?)",
   );
 
-  for (const key in data) {
-    if (key !== "words") {
-      insertMeta.run(
-        key,
-        JSON.stringify((data as unknown as Record<string, unknown>)[key]),
-      );
-    }
-  }
-
-  for (const entry of data.words) {
-    insertEntry.run(entry.id, JSON.stringify(entry));
-
-    for (const k of entry.kanji) {
-      insertKanji.run(entry.id, tokenize(k.text));
-      insertRaw.run(entry.id, k.text);
+  db.transaction(() => {
+    for (const key in data) {
+      if (key !== "words") {
+        insertMeta.run(
+          key,
+          JSON.stringify((data as unknown as Record<string, unknown>)[key]),
+        );
+      }
     }
 
-    for (const k of entry.kana) {
-      insertKana.run(entry.id, tokenize(k.text));
-      insertRaw.run(entry.id, k.text);
+    for (const entry of data.words) {
+      insertEntry.run(entry.id, JSON.stringify(entry));
+
+      for (const k of entry.kanji) {
+        insertKanji.run(entry.id, tokenize(k.text));
+        insertRaw.run(entry.id, k.text, 1);
+      }
+
+      for (const k of entry.kana) {
+        insertKana.run(entry.id, tokenize(k.text));
+        insertRaw.run(entry.id, k.text, 0);
+      }
     }
-  }
+  })();
 
   return {
     db,
@@ -296,7 +315,7 @@ export function getXrefs(db: Db, xref: Xref): Word[] {
   } else {
     // all we have is `first`, which could be a keb or reb (kanji or
     // reading/kana) so search both
-    const hits = get(db, first).concat(get(db, first));
+    const hits = get(db, first);
 
     const seen = new Set(); // dedupe
     const result: Word[] = [];
@@ -337,13 +356,29 @@ export function readingBeginning(
   prefix: string,
   limit = -1,
   offset = 0,
-) {
-  return get(db, prefix, {
-    exact: false,
+): Word[] {
+  const rows = statements(db).getKana.all(
+    `${prefix}%`,
     limit,
     offset,
-  });
+  ) as string[];
+  return rows.map((r) => JSON.parse(r) as Word);
 }
+
+export function kanjiBeginning(
+  db: Db,
+  prefix: string,
+  limit = -1,
+  offset = 0,
+): Word[] {
+  const rows = statements(db).getKanji.all(
+    `${prefix}%`,
+    limit,
+    offset,
+  ) as string[];
+  return rows.map((r) => JSON.parse(r) as Word);
+}
+
 export function readingAnywhere(db: Db, text: string, limit = -1, offset = 0) {
   return fts({
     db,
@@ -354,8 +389,6 @@ export function readingAnywhere(db: Db, text: string, limit = -1, offset = 0) {
     offset,
   });
 }
-export const kanjiBeginning = readingBeginning;
-
 export function kanjiAnywhere(db: Db, text: string, limit = -1, offset = 0) {
   return fts({
     db,
