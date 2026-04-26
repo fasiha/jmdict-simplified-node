@@ -20,6 +20,12 @@ function statements(db) {
            JOIN entries ON {{template}}.entry_id = entries.id
            WHERE {{template}}.text MATCH ?
            GROUP BY entries.id LIMIT ? OFFSET ?`;
+    const prefixByKind = (isKanji) => db.prepare(
+      `SELECT entries.entry_json FROM raws
+           JOIN entries ON raws.entry_id = entries.id
+           WHERE raws.is_kanji = ${isKanji} AND raws.text LIKE ?
+           GROUP BY entries.id LIMIT ? OFFSET ?`
+    ).pluck();
     hit = {
       get: db.prepare(
         `SELECT entries.entry_json FROM raws
@@ -27,6 +33,8 @@ function statements(db) {
            WHERE raws.text LIKE ?
            GROUP BY entries.id LIMIT ? OFFSET ?`
       ).pluck(),
+      getKanji: prefixByKind(1),
+      getKana: prefixByKind(0),
       countExact: db.prepare(
         `SELECT COUNT(DISTINCT entries.id) FROM raws
             JOIN entries ON raws.entry_id = entries.id
@@ -58,7 +66,10 @@ async function setup(dbpath, filename = "") {
   );
 `);
   const getMetaStmt = db.prepare("SELECT value_json FROM metadata WHERE key = ?").pluck();
-  const get2 = (s) => JSON.parse(getMetaStmt.get(s));
+  const get2 = (s) => {
+    var _a;
+    return JSON.parse((_a = getMetaStmt.get(s)) != null ? _a : "");
+  };
   try {
     return {
       db,
@@ -97,8 +108,11 @@ async function setup(dbpath, filename = "") {
   CREATE TABLE IF NOT EXISTS raws (
     text TEXT NOT NULL,
     entry_id TEXT NOT NULL,
+    is_kanji INTEGER NOT NULL,
     UNIQUE(text, entry_id)
   );
+  CREATE INDEX IF NOT EXISTS raws_is_kanji_text ON raws(is_kanji, text);
+  CREATE INDEX IF NOT EXISTS raws_text ON raws(text);
 `);
   const data = await (async () => {
     if (!filename) {
@@ -131,27 +145,29 @@ async function setup(dbpath, filename = "") {
     "INSERT INTO kanas (entry_id, text) VALUES (?, ?)"
   );
   const insertRaw = db.prepare(
-    "INSERT INTO raws (entry_id, text) VALUES (?, ?)"
+    "INSERT INTO raws (entry_id, text, is_kanji) VALUES (?, ?, ?)"
   );
-  for (const key in data) {
-    if (key !== "words") {
-      insertMeta.run(
-        key,
-        JSON.stringify(data[key])
-      );
+  db.transaction(() => {
+    for (const key in data) {
+      if (key !== "words") {
+        insertMeta.run(
+          key,
+          JSON.stringify(data[key])
+        );
+      }
     }
-  }
-  for (const entry of data.words) {
-    insertEntry.run(entry.id, JSON.stringify(entry));
-    for (const k of entry.kanji) {
-      insertKanji.run(entry.id, tokenize(k.text));
-      insertRaw.run(entry.id, k.text);
+    for (const entry of data.words) {
+      insertEntry.run(entry.id, JSON.stringify(entry));
+      for (const k of entry.kanji) {
+        insertKanji.run(entry.id, tokenize(k.text));
+        insertRaw.run(entry.id, k.text, 1);
+      }
+      for (const k of entry.kana) {
+        insertKana.run(entry.id, tokenize(k.text));
+        insertRaw.run(entry.id, k.text, 0);
+      }
     }
-    for (const k of entry.kana) {
-      insertKana.run(entry.id, tokenize(k.text));
-      insertRaw.run(entry.id, k.text);
-    }
-  }
+  })();
   return {
     db,
     version: data.version,
@@ -196,7 +212,7 @@ function getXrefs(db, xref) {
     );
     return rebMatches;
   } else {
-    const hits = get(db, first).concat(get(db, first));
+    const hits = get(db, first);
     const seen = /* @__PURE__ */ new Set();
     const result = [];
     for (const hit of hits) {
@@ -226,11 +242,20 @@ function findExactIds(db, text) {
   return statements(db).findExactIds.all(text);
 }
 function readingBeginning(db, prefix, limit = -1, offset = 0) {
-  return get(db, prefix, {
-    exact: false,
+  const rows = statements(db).getKana.all(
+    `${prefix}%`,
     limit,
     offset
-  });
+  );
+  return rows.map((r) => JSON.parse(r));
+}
+function kanjiBeginning(db, prefix, limit = -1, offset = 0) {
+  const rows = statements(db).getKanji.all(
+    `${prefix}%`,
+    limit,
+    offset
+  );
+  return rows.map((r) => JSON.parse(r));
 }
 function readingAnywhere(db, text, limit = -1, offset = 0) {
   return fts({
@@ -242,7 +267,6 @@ function readingAnywhere(db, text, limit = -1, offset = 0) {
     offset
   });
 }
-var kanjiBeginning = readingBeginning;
 function kanjiAnywhere(db, text, limit = -1, offset = 0) {
   return fts({
     db,

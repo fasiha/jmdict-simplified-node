@@ -81,8 +81,8 @@ declare function findExact(db: Database, text: string, limit?: number, offset?: 
 declare function countExact(db: Database, text: string): number;
 declare function findExactIds(db: Database, text: string): string[];
 declare function readingBeginning(db: Database, prefix: string, limit?: number, offset?: number): Word[];
+declare function kanjiBeginning(db: Database, prefix: string, limit?: number, offset?: number): Word[];
 declare function readingAnywhere(db: Database, text: string, limit?: number, offset?: number): Word[];
-declare const kanjiBeginning: typeof readingBeginning;
 declare function kanjiAnywhere(db: Database, text: string, limit?: number, offset?: number): Word[];
 declare function readingFuzzy(db: Database, text: string, limit?: number, offset?: number): Word[];
 declare function kanjiFuzzy(db: Database, text: string, limit?: number, offset?: number): Word[];
